@@ -158,7 +158,17 @@ void ExportManager::ExportRpakAssets(const std::unique_ptr<RpakLib>& RpakFileSys
 	uint32_t CurrentProgress = 0;
 	string ExportDirectory = ExportPath;
 	// Do not create any directories by default, the directory will create by export
-
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "images"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "materials"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "models"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "animations"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "anim_sequences"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "subtitles"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "datatables"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "shadersets"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "settings"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "rson"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "rui"));
 
 	RpakFileSystem->InitializeModelExporter((ModelExportFormat_t)Config.Get<System::SettingType::Integer>("ModelFormat"));
 	RpakFileSystem->InitializeAnimExporter((AnimExportFormat_t)Config.Get<System::SettingType::Integer>("AnimFormat"));
