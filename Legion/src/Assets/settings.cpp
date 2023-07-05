@@ -147,7 +147,6 @@ void RpakLib::ExtractSettings(const RpakLoadAsset& Asset, const string& Path, co
 		out << "\n\t" << it.name << " ";
 		
 		RpakStream->SetPosition(this->GetFileOffset(Asset, Header.Values.Index, Header.Values.Offset + it.valueOffset));
-		g_Logger.Info("Extract Value:" + it.name + "\n ");
 		switch (it.type)
 		{
 		case SettingsFieldType::ST_Bool:
@@ -219,14 +218,10 @@ void RpakLib::ExtractSettings(const RpakLoadAsset& Asset, const string& Path, co
 
 					for (int i = 1; i <= nArraySize; i++)
 					{
-						printf("nArraySize:%d", nArraySize);
+						if (i == 3 && it.name == "friendlyJumpJetFXPackage" || i == 3 && it.name == "enemyJumpJetFXPackage") {
+							break;
+						}
 
-						if (i == 3 && it.name == "friendlyJumpJetFXPackage") {
-							break;
-						}
-						else if (i == 3 && it.name == "enemyJumpJetFXPackage") {
-							break;
-						}
 
 						int nEntryOffset = nArrayPtrOffset + ((i - 1) * sizeof(RPakPtr));
 							
