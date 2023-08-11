@@ -118,7 +118,9 @@ void RpakLib::ExportSettings(const RpakLoadAsset& Asset, const string& Path)
 	if (!Utils::ShouldWriteFile(DestinationPath))
 		return;
 
-	this->ExtractSettings(Asset, DestinationPath, Name, Header);
+
+		this->ExtractSettings(Asset, DestinationPath, Name, Header);
+
 }
 
 void RpakLib::ExtractSettings(const RpakLoadAsset& Asset, const string& Path, const string& Name, const SettingsHeader& Header)
@@ -135,17 +137,16 @@ void RpakLib::ExtractSettings(const RpakLoadAsset& Asset, const string& Path, co
 	IO::BinaryReader Reader = IO::BinaryReader(RpakStream.get(), true);
 
 	std::ofstream out(Path.ToCString(), std::ios::out);
-
+	
 	out << "\"" << Name << "\" -> \"" << Layout.name << "\"" << "\n{";
-
+	
 	Layout.items.Sort();
 
 	for (auto& it : Layout.items)
-	{
+	{	
 		out << "\n\t" << it.name << " ";
-
+		
 		RpakStream->SetPosition(this->GetFileOffset(Asset, Header.Values.Index, Header.Values.Offset + it.valueOffset));
-
 		switch (it.type)
 		{
 		case SettingsFieldType::ST_Bool:
@@ -217,15 +218,23 @@ void RpakLib::ExtractSettings(const RpakLoadAsset& Asset, const string& Path, co
 
 					for (int i = 1; i <= nArraySize; i++)
 					{
+						if (i == 3 && it.name == "friendlyJumpJetFXPackage" || i == 3 && it.name == "enemyJumpJetFXPackage") {
+							break;
+						}
+
+
 						int nEntryOffset = nArrayPtrOffset + ((i - 1) * sizeof(RPakPtr));
+							
 						RpakStream->SetPosition(this->GetFileOffset(Asset, Header.Values.Index, Header.Values.Offset + nEntryOffset));
-
+							
 						RPakPtr pValue = Reader.Read<RPakPtr>();
-						if (pValue.Index && pValue.Offset)
-						{
-							RpakStream->SetPosition(this->GetFileOffset(Asset, pValue.Index, pValue.Offset));
-							string sEntry = Reader.ReadCString();
 
+
+						if (pValue.Index && pValue.Offset)
+						{								
+							RpakStream->SetPosition(this->GetFileOffset(Asset, pValue.Index, pValue.Offset));
+								
+							string sEntry = Reader.ReadCString();
 							out << "\n\t\t\"" << sEntry.ToString() << "\" ";
 						}
 					}
