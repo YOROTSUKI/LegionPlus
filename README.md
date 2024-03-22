@@ -1,3 +1,23 @@
+
+
+这是我根据自己的适用需求修改的LegionPlus，可能无法及时与主分支同步。
+
+这是我自己添加的功能：
+
+1. 仅生成被选择类型的文件夹
+
+2. 新增命令行模式指令
+
+正在开发的新功能：
+
+1. 导出模型下属的所有材质时针对不同版本的材质进行分类
+
+2. 更改分辨率的材质。例如：2048\*2048 >>> 4096\*4096
+
+3. 正则匹配资产
+
+下面是主分支的.md
+
 Legion+
 =======
 
@@ -6,7 +26,9 @@ Asset extraction tool for Apex Legends and Titanfall 2
 Originally created by DTZxPorter in 2019.
 
 ---
+
 ## Table of Contents
+
 - [Legion+](#legion)
   - [Table of Contents](#table-of-contents)
   - [Installation](#installation)
@@ -21,6 +43,7 @@ Originally created by DTZxPorter in 2019.
   - [Known Issues](#known-issues)
 
 ## Installation
+
 To install Legion+, you may choose to either download the latest pre-compiled release from [the releases page](https://github.com/r-ex/LegionPlus/releases/latest), or compile the source code for yourself using the provided Visual Studio Solution file (.sln)
 
 Compilation is currently only supported on Windows due to some platform-specific libraries that are required
@@ -30,6 +53,7 @@ Compilation is currently only supported on Windows due to some platform-specific
 ### Command Line Options
 
 #### Modes
+
 ```
 --export <path to .rpak or .mbnk>
 Exports the specified rpak or Audio file according to your saved configuration, unless load flags are provided
@@ -39,6 +63,7 @@ Produces a list of all exportable assets within the specified .rpak or .mbnk fil
 ```
 
 #### Export Load Flags
+
 When any load flag is used, your saved configuration is ignored and only the specified flags are used
 When multiple load flags are used together, all specified types will be loaded
 
@@ -66,9 +91,11 @@ Shadersets: --nmlrecalc <none, directx/dx, opengl/ogl>
 Audio Language: --audiolanguage <english, french, german, spanish, italian, japanese, polish, russian, mandarin, korean>
 MatCPU: --matcpu <none, struct, cpu>
 ```
+
 `Example: LegionPlus.exe --export <path to rpak> --loadmodels --loadanimations --mdlfmt obj --animfmt seanim --imgfmt png`
 
 #### Other Flags
+
 ```
 --overwrite - Enables file overwriting for replacing existing versions of exported assets
 --nologfile - Disables log files being created
@@ -78,9 +105,13 @@ MatCPU: --matcpu <none, struct, cpu>
 --usetxtrguids - Enables the renaming of Guid names for Textures (e.g. adding _albedoTexture, etc.)
 --skinexport - Enables exporting of all skins for available models
 ```
+
 ---
+
 ### Controls
+
 Asset List
+
 ```
 Keyboard
 P - open preview window for currently selected asset
@@ -91,14 +122,17 @@ Right Click - copies the names of the currently selected assets to clipboard
 ```
 
 Preview
+
 ```
 Alt + Left Click - move mouse to pivot camera around target
 Alt + Right Click - move mouse to zoom in and out of the target
 Alt + Middle Click - move mouse to pan camera
 ```
+
 ---
 
 ## Support
+
 If you encounter any issues or errors during your usage of Legion+, please let us know by opening a new Issue and providing as much detail as possible.
 
 We also have a [discord server](https://discord.gg/ADek6fxVGe) where you will be able to directly ask for support and receive updates about the project

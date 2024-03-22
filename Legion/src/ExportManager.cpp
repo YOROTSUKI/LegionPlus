@@ -48,9 +48,9 @@ void ExportManager::InitializeExporter()
 	}
 
 	// init settings if they don't already exist
-	INIT_SETTING(Integer, "ModelFormat", (uint32_t)ModelExportFormat_t::Cast);
-	INIT_SETTING(Integer, "AnimFormat", (uint32_t)AnimExportFormat_t::Cast);
-	INIT_SETTING(Integer, "ImageFormat", (uint32_t)ImageExportFormat_t::Dds);
+	INIT_SETTING(Integer, "ModelFormat", (uint32_t)ModelExportFormat_t::SEModel);
+	INIT_SETTING(Integer, "AnimFormat", (uint32_t)AnimExportFormat_t::SEAnim);
+	INIT_SETTING(Integer, "ImageFormat", (uint32_t)ImageExportFormat_t::Png);
 
 	INIT_SETTING(Boolean, "LoadModels", true);
 	INIT_SETTING(Boolean, "LoadAnimations", true);
@@ -63,6 +63,7 @@ void ExportManager::InitializeExporter()
 	INIT_SETTING(Boolean, "LoadSettingsSets", true);
 	INIT_SETTING(Boolean, "LoadEffects", true);
 	INIT_SETTING(Boolean, "LoadRSONs", true);
+	INIT_SETTING(Boolean, "LoadWrappedFiles", true);
 	INIT_SETTING(Boolean, "OverwriteExistingFiles", false);
 
 	Config.Save(ConfigPath);
@@ -158,17 +159,18 @@ void ExportManager::ExportRpakAssets(const std::unique_ptr<RpakLib>& RpakFileSys
 	uint32_t CurrentProgress = 0;
 	string ExportDirectory = ExportPath;
 
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "images"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "materials"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "models"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "animations"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "anim_sequences"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "subtitles"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "datatables"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "shadersets"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "settings"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "rson"));
-	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "rui"));
+	// Do not create any directories by default, the directory will create by export
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "images"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "materials"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "models"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "animations"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "anim_sequences"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "subtitles"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "datatables"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "shadersets"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "settings"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "rson"));
+	//IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "rui"));
 
 	RpakFileSystem->InitializeModelExporter((ModelExportFormat_t)Config.Get<System::SettingType::Integer>("ModelFormat"));
 	RpakFileSystem->InitializeAnimExporter((AnimExportFormat_t)Config.Get<System::SettingType::Integer>("AnimFormat"));
@@ -234,6 +236,9 @@ void ExportManager::ExportRpakAssets(const std::unique_ptr<RpakLib>& RpakFileSys
 			case (uint32_t)AssetType_t::RUI:
 				RpakFileSystem->ExportRUI(AssetToExport, IO::Path::Combine(ExportDirectory, "rui"));
 				break;
+			case (uint32_t)AssetType_t::Wrap:
+				RpakFileSystem->ExportWrappedFile(AssetToExport, IO::Path::Combine(ExportDirectory, "wrap"));
+				break;
 			}
 
 			IsCancel = StatusCallback(Asset.AssetIndex, MainForm);
@@ -267,7 +272,7 @@ void ExportManager::ExportMdlAssets(const std::unique_ptr<MdlLib>& MdlFS, List<s
 	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "models"));
 	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "animations"));
 
-	MdlFS->InitializeModelExporter((ModelExportFormat_t)Config.Get<System::SettingType::Integer>("ModelFormat"));
+	MdlFS->InitializeModelExporter((ModelExportFormat_t)Config.Get<System::SettingType::Integer>("ModelFormat"));fatal: unable to access
 	MdlFS->InitializeAnimExporter((AnimExportFormat_t)Config.Get<System::SettingType::Integer>("AnimFormat"));
 
 	Threading::ParallelTask([&MdlFS, &ExportAssets, &AssetIndex, &CurrentProgress, &UpdateMutex, ExportDirectory]
