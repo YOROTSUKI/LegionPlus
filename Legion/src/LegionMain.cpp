@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "LegionMain.h"
-
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
 #include "UIXButton.h"
 #include "UIXTextBox.h"
 #include "UIXListView.h"
@@ -8,6 +11,7 @@
 #include "LegionTitanfallConverter.h"
 #include "LegionTablePreview.h"
 #include <version.h>
+
 
 LegionMain::LegionMain()
 	: Forms::Form(), IsInExportMode(false)
@@ -489,10 +493,67 @@ List<string> LegionMain::GetMaterialList(const Assets::Model& Model)
 	return _MaterialSkinNameList;
 }
 
+void writeToCSV(const std::string& filename, const std::vector<std::vector<string>>& data) {
+	// Ensure valid filename (optional)
+	if (filename.empty()) {
+		std::cerr << "Error: Empty filename provided." << std::endl;
+		return;
+	}
+	try {
+		// Combine filename with potentially relative path using filesystem
+		const std::filesystem::path full_path = std::filesystem::current_path() / filename;
+		g_Logger.Info(full_path.string());
+		// Open file for writing
+		std::ofstream file(full_path.string());
+
+		// Handle file opening error
+		if (!file.is_open()) {
+			std::cerr << "Error opening CSV file: " << full_path << std::endl;
+			return;
+		}
+
+		// Write data to file
+		for (const auto& row : data) {
+			// Handle empty row (optional)
+			if (row.empty()) {
+				continue; // Skip to next row
+			}
+
+			bool first_cell = true;
+			for (const auto& cell : row) {
+				if (!first_cell) {
+					file << ","; // Separate cells with commas
+				}
+				file << cell;
+				first_cell = false;
+			}
+			file << std::endl; // Newline for each row
+		}
+
+		// Close the file (implicitly handled by destructor in modern C++)
+	}
+	catch (const std::filesystem::filesystem_error& e) {
+		std::cerr << "Error: File system operation failed with exception: " << e.what() << std::endl;
+	}
+}
+
 void LegionMain::DumpSkinList()
 {	
-	g_Logger.Info("Function DumpSkinList in\n");
+	// building file name
+	string SearchText = this->SearchBox->Text();
+
+	if (SearchText == "") {
+		SearchText = "Default";
+	};
+	string file_name = SearchText+".csv";
+
+	
+	
 	List<ExportAsset> AssetsToExport(this->DisplayIndices.Count(), true);
+
+	// std::vector<string> Header = { "Model_Name", "Skin_Name" };
+	std::vector<std::vector<string>> SkinData;
+	SkinData.push_back({ "Model_Name", "Skin_Name" });
 
 	for (uint32_t i = 0; i < AssetsToExport.Count(); i++)
 	{
@@ -514,24 +575,20 @@ void LegionMain::DumpSkinList()
 				if (Mdl == nullptr)
 					return;
 				List<string> _MaterialSkinNameList = GetMaterialList(*Mdl.get());
-				g_Logger.Info("local skin count:");
-				std::cout << _MaterialSkinNameList.Count() << std::endl;
-				g_Logger.Info(model_name+"\n");
+
+
 				for (int i = 0; i < _MaterialSkinNameList.Count(); i++)
 				{
-					//continue;
-					g_Logger.Info(_MaterialSkinNameList[i]+"\n");
+					SkinData.push_back({ model_name,_MaterialSkinNameList[i]});
 				}
 
-				// 模型名  model_name string
-				// 模型列表 _materialSkinList List - > string
 
 			}
 			break;
 		};
 	}
-	g_Logger.Info("Function DumpSkinList out\n");
-
+	
+	writeToCSV(std::string(file_name), SkinData);
 }
 
 
