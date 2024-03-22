@@ -8,7 +8,7 @@ LegionPreview::LegionPreview()
 }
 
 void LegionPreview::AssignPreviewModel(const Assets::Model& Model, const string& Name, uint64_t DebugVersion)
-{
+{	
 	this->ModelPreview->SetViewModel(Model);
 	this->ModelPreview->SetAssetName(Name);
 	this->ModelPreview->SetDebugVersion(DebugVersion);

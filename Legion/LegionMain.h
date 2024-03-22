@@ -39,6 +39,7 @@ protected:
 	static void OnClearClick(Forms::Control* Sender);
 	static void OnTitanfallClick(Forms::Control* Sender);
 	static void OnRefreshClick(Forms::Control* Sender);
+	static void DumpSkinListClick(Forms::Control* Sender);
 	static void OnListRightClick(const std::unique_ptr<MouseEventArgs>& EventArgs, Forms::Control* Sender);
 	static void OnListDoubleClick(Forms::Control* Sender);
 	static void OnListKeyUp(const std::unique_ptr<KeyEventArgs>& EventArgs, Forms::Control* Sender);
@@ -70,11 +71,14 @@ private:
 	void ExportProgressChanged(uint32_t Progress, bool Finished);
 	bool CheckStatus(int32_t AssetIndex);
 	void DoPreviewSwap();
+	void DumpSkinList();
+	List<string> GetMaterialList(const Assets::Model& Model);
 
 	std::unique_ptr<Assets::Texture> MaterialStreamCallback(string Source, uint64_t Hash);
 
 	// Internal controls reference
-	UIX::UIXButton* TitanfallConverterButton;
+	// UIX::UIXButton* TitanfallConverterButton;
+	UIX::UIXButton* DumpSkinListButton;
 	UIX::UIXButton* ClearSearchButton;
 	UIX::UIXLabel* StatusLabel;
 	UIX::UIXButton* SearchButton;

@@ -26,14 +26,14 @@ void LegionMain::InitializeComponent()
 	this->SetMinimumSize({ 791, 520 });
 	this->SetStartPosition(Forms::FormStartPosition::CenterScreen);
 
-	this->TitanfallConverterButton = new UIX::UIXButton();
-	this->TitanfallConverterButton->SetSize({ 78, 27 });
-	this->TitanfallConverterButton->SetLocation({ 290, 446 });
-	this->TitanfallConverterButton->SetTabIndex(9);
-	this->TitanfallConverterButton->SetText("Titanfall 2");
-	this->TitanfallConverterButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
-	this->TitanfallConverterButton->Click += &OnTitanfallClick;
-	this->AddControl(this->TitanfallConverterButton);
+	this->DumpSkinListButton = new UIX::UIXButton();
+	this->DumpSkinListButton->SetSize({ 78, 27 });
+	this->DumpSkinListButton->SetLocation({ 290, 446 });
+	this->DumpSkinListButton->SetTabIndex(9);
+	this->DumpSkinListButton->SetText("DumpSkinList");
+	this->DumpSkinListButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
+	this->DumpSkinListButton->Click += &DumpSkinListClick;
+	this->AddControl(this->DumpSkinListButton);
 
 	this->RefreshAssetsButton = new UIX::UIXButton();
 	this->RefreshAssetsButton->SetSize({ 78, 27 });
@@ -482,6 +482,59 @@ void LegionMain::SetAssetError(int32_t AssetIndex)
 	(*this->LoadedAssets)[this->DisplayIndices[AssetIndex]].Status = ApexAssetStatus::Error;
 }
 
+List<string> LegionMain::GetMaterialList(const Assets::Model& Model)
+{
+	List<string> _MaterialSkinNameList = Model.SkinMaterialNames;
+
+	return _MaterialSkinNameList;
+}
+
+void LegionMain::DumpSkinList()
+{	
+	g_Logger.Info("Function DumpSkinList in\n");
+	List<ExportAsset> AssetsToExport(this->DisplayIndices.Count(), true);
+
+	for (uint32_t i = 0; i < AssetsToExport.Count(); i++)
+	{
+		auto& DisplayIndex = this->DisplayIndices[i];
+		auto& Asset = (*this->LoadedAssets.get())[DisplayIndex];
+
+		switch (Asset.Type)
+		{
+			
+		case ApexAssetType::Model:
+			{
+				string model_name = Asset.Name;
+				g_Logger.Info(model_name);
+				auto& Asset_Hash = Asset.Hash;
+				
+				// auto Mdl = this->RpakFileSystem->BuildPreviewModel(Asset_Hash).get();
+				uint64_t fct = (Asset.FileCreatedTime / 10000000) - 0x2b6109100;
+				auto Mdl = this->RpakFileSystem->BuildPreviewModel(Asset_Hash);
+				if (Mdl == nullptr)
+					return;
+				List<string> _MaterialSkinNameList = GetMaterialList(*Mdl.get());
+				g_Logger.Info("local skin count:");
+				std::cout << _MaterialSkinNameList.Count() << std::endl;
+				g_Logger.Info(model_name+"\n");
+				for (int i = 0; i < _MaterialSkinNameList.Count(); i++)
+				{
+					//continue;
+					g_Logger.Info(_MaterialSkinNameList[i]+"\n");
+				}
+
+				// 模型名  model_name string
+				// 模型列表 _materialSkinList List - > string
+
+			}
+			break;
+		};
+	}
+	g_Logger.Info("Function DumpSkinList out\n");
+
+}
+
+
 void LegionMain::DoPreviewSwap()
 {
 	if (!this->RpakFileSystem || !this->PreviewWindow || this->PreviewWindow->GetHandle() == nullptr)
@@ -667,6 +720,13 @@ void LegionMain::OnRefreshClick(Forms::Control* Sender)
 	LegionMain* ThisPtr = (LegionMain*)Sender->FindForm();
 
 	ThisPtr->RefreshView();
+}
+
+void LegionMain::DumpSkinListClick(Forms::Control* Sender)
+{
+	LegionMain* ThisPtr = (LegionMain*)Sender->FindForm();
+
+	ThisPtr->DumpSkinList();
 }
 
 void LegionMain::OnListRightClick(const std::unique_ptr<MouseEventArgs>& EventArgs, Forms::Control* Sender)
