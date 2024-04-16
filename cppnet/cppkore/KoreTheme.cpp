@@ -96,11 +96,26 @@ namespace Themes
 	*/
 	
 	// S18 Theme
+	/*
 	const static auto BorderBrush = Drawing::Color(198, 40, 40);
 	const static auto DarkBorderBrush = Drawing::Color(198, 40, 40);
 	const static auto ProgressGrad1 = Drawing::Color(198, 40, 40);
 	const static auto ProgressGrad2 = Drawing::Color(77, 6, 12);
+	*/
 
+	// S19 Theme
+	/*
+	const static auto BorderBrush = Drawing::Color(178, 134, 207);
+	const static auto DarkBorderBrush = Drawing::Color(178, 134, 207);
+	const static auto ProgressGrad1 = Drawing::Color(178, 134, 207);
+	const static auto ProgressGrad2 = Drawing::Color(136, 87, 150);
+	*/
+
+	// S20 Theme
+	const static auto BorderBrush = Drawing::Color(88, 151, 149);
+	const static auto DarkBorderBrush = Drawing::Color(88, 151, 149);
+	const static auto ProgressGrad1 = Drawing::Color(88, 151, 149);
+	const static auto ProgressGrad2 = Drawing::Color(88, 151, 149);
 	
 	// Constants for images
 	static Drawing::Image* CheckBoxImage = nullptr;
