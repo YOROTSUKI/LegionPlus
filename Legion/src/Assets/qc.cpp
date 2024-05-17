@@ -2,142 +2,1020 @@
 #include "RpakLib.h"
 #include "Path.h"
 #include "Directory.h"
+#include <MathHelper.h>
+const std::vector<std::string> MaterialTypes = { "_rgdu", "_rgdp", "_rgdc", "_sknu", "_sknp", "_sknc", "_wldu", "_wldc", "_ptcu", "_ptcs" };
 
-void RpakLib::ExportQC(int assetVersion, const string& Path, const string& modelPath, char* rmdlBuf, char* phyBuf)
+#define RadiansToDegrees(r) ((r / Math::MathHelper::PI) * 180.0f)
+
+void WriteCommonJiggle(IO::StreamWriter& qc, mstudiojigglebonev54_t*& JiggleBone)
 {
-	IO::StreamWriter qc(IO::File::Create(Path));
-	if (assetVersion <= 10)
+	if (JiggleBone->length)
+		qc.WriteFmt("\t\tlength %.4f\n", JiggleBone->length);
+
+	if (JiggleBone->tipMass)
+		qc.WriteFmt("\t\ttip_mass %.4f\n", JiggleBone->tipMass);
+
+	if (JiggleBone->flags & JIGGLE_HAS_ANGLE_CONSTRAINT)
+		qc.WriteFmt("\t\tangle_constraint %.4f\n", RadiansToDegrees(JiggleBone->angleLimit));
+
+	if (JiggleBone->flags & JIGGLE_HAS_YAW_CONSTRAINT)
+		qc.WriteFmt("\t\tyaw_constraint %.4f %.4f\n", RadiansToDegrees(JiggleBone->minYaw), RadiansToDegrees(JiggleBone->maxYaw));
+
+	if (JiggleBone->yawFriction)
+		qc.WriteFmt("\t\tyaw_friction %.4f\n", JiggleBone->yawFriction);
+
+	if (JiggleBone->yawBounce)
+		qc.WriteFmt("\t\tyaw_bounce %.4f\n", JiggleBone->yawBounce);
+
+	if (JiggleBone->flags & JIGGLE_HAS_PITCH_CONSTRAINT)
+		qc.WriteFmt("\t\tpitch_constraint %.4f %.4f\n", RadiansToDegrees(JiggleBone->minPitch), RadiansToDegrees(JiggleBone->maxPitch));
+
+	if (JiggleBone->pitchFriction)
+		qc.WriteFmt("\t\tpitch_friction %.4f\n", JiggleBone->pitchFriction);
+
+	if (JiggleBone->pitchBounce)
+		qc.WriteFmt("\t\tpitch_bounce %.4f\n", JiggleBone->pitchBounce);
+}
+
+void WriteJiggleBoneData(IO::StreamWriter& qc, mstudiojigglebonev54_t*& JiggleBone)
+{
+	if (JiggleBone->flags & JIGGLE_IS_FLEXIBLE)
 	{
-		s3studiohdr_t* hdr = reinterpret_cast<s3studiohdr_t*>(rmdlBuf);
+		qc.Write("\tis_flexible {\n");
 
-		qc.WriteFmt("$modelname \"%s\"\n", modelPath.ToCString());
-		qc.WriteFmt("$cdmaterials \"\"\n");
+		WriteCommonJiggle(qc, JiggleBone);
 
-		char* surfaceProp = reinterpret_cast<char*>(rmdlBuf + hdr->surfacepropindex);
+		if (JiggleBone->yawStiffness)
+			qc.WriteFmt("\t\tyaw_stiffness %.4f\n", JiggleBone->yawStiffness);
 
-		qc.WriteFmt("$surfaceprop \"%s\"\n", surfaceProp);
+		if (JiggleBone->yawDamping)
+			qc.WriteFmt("\t\tyaw_damping %.4f\n", JiggleBone->yawDamping);
 
-		qc.WriteFmt("$contents \"%s\"\n\n", (hdr->contents & 1) == 1 ? "solid" : "notsolid");
+		if (JiggleBone->pitchStiffness)
+			qc.WriteFmt("\t\tpitch_stiffness %.4f\n", JiggleBone->pitchStiffness);
 
-		if (hdr->flags & STUDIOHDR_FLAGS_FORCE_OPAQUE)
-			qc.Write("$opaque\n\n");
+		if (JiggleBone->pitchDamping)
+			qc.WriteFmt("\t\tpitch_damping %.4f\n", JiggleBone->pitchDamping);
 
-		qc.WriteFmt("$eyeposition %f %f %f\n", hdr->eyeposition.X, hdr->eyeposition.Y, hdr->eyeposition.Z);
-		qc.WriteFmt("$illumposition %f %f %f\n\n", hdr->illumposition.X, hdr->illumposition.Y, hdr->illumposition.Z);
+		if (JiggleBone->flags & JIGGLE_HAS_LENGTH_CONSTRAINT)
+			qc.Write("\t\tallow_length_flex\n");
 
-		for (int i = 0; i < hdr->numbodyparts; ++i)
+		if (JiggleBone->alongStiffness)
+			qc.WriteFmt("\t\talong_stiffness %.4f\n", JiggleBone->alongStiffness);
+
+		if (JiggleBone->alongDamping)
+			qc.WriteFmt("\t\talong_damping %.4f\n", JiggleBone->alongDamping);
+
+		qc.Write("\t}\n\n");
+	}
+
+	if (JiggleBone->flags & JIGGLE_HAS_BASE_SPRING)
+	{
+		qc.Write("\thas_base_spring {\n");
+
+		WriteCommonJiggle(qc, JiggleBone);
+
+		if (JiggleBone->baseStiffness)
+			qc.WriteFmt("\t\tstiffness %.4f\n", JiggleBone->baseStiffness);
+
+		if (JiggleBone->baseDamping)
+			qc.WriteFmt("\t\tdamping %.4f\n", JiggleBone->baseDamping);
+
+		if (JiggleBone->baseMinLeft || JiggleBone->baseMaxLeft)
+			qc.WriteFmt("\t\tleft_constraint %.4f %.4f\n", JiggleBone->baseMinLeft, JiggleBone->baseMaxLeft);
+
+		if (JiggleBone->baseLeftFriction)
+			qc.WriteFmt("\t\tleft_friction %.4f\n", JiggleBone->baseLeftFriction);
+
+		if (JiggleBone->baseMinUp || JiggleBone->baseMaxUp)
+			qc.WriteFmt("\t\tup_constraint %.4f %.4f\n", JiggleBone->baseMinUp, JiggleBone->baseMaxUp);
+
+		if (JiggleBone->baseUpFriction)
+			qc.WriteFmt("\t\tup_friction %.4f\n", JiggleBone->baseUpFriction);
+
+		if (JiggleBone->baseMinForward || JiggleBone->baseMaxForward)
+			qc.WriteFmt("\t\tforward_constraint %.4f %.4f\n", JiggleBone->baseMinForward, JiggleBone->baseMaxForward);
+
+		if (JiggleBone->baseForwardFriction)
+			qc.WriteFmt("\t\tforward_friction %.4f\n", JiggleBone->baseForwardFriction);
+
+		if (JiggleBone->baseMass)
+			qc.WriteFmt("\t\tbase_mass %.4f\n", JiggleBone->baseMass);
+
+		qc.Write("\t}\n\n");
+	}
+};
+
+void SMDWriteRefAnim(const string& Path, const List<Assets::Bone>& Bones, string Name)
+{
+	string RefPath = IO::Path::Combine(IO::Path::GetDirectoryName(Path), (Name + "_ref.smd"));
+
+	IO::StreamWriter Writer = IO::StreamWriter(IO::File::Create(RefPath));
+
+	Writer.WriteLine(
+		"version 1\n"
+		"nodes"
+	);
+
+	uint32_t BoneIndex = 0;
+
+	for (Assets::Bone& Bone : Bones)
+	{
+		Writer.WriteLineFmt("\t%d \"%s\" %d", BoneIndex, (char*)Bone.Name(), Bone.Parent());
+		BoneIndex++;
+	}
+
+	Writer.WriteLine(
+		"end\n"
+		"skeleton\n"
+		"time 0"
+	);
+
+	BoneIndex = 0;
+
+	for (Assets::Bone& Bone : Bones)
+	{
+		auto Euler = Bone.LocalRotation().ToEulerAngles();
+		Writer.WriteLineFmt("\t%d %f %f %f %f %f %f", BoneIndex, Bone.LocalPosition().X, Bone.LocalPosition().Y, Bone.LocalPosition().Z, Math::MathHelper::DegreesToRadians(Euler.X), Math::MathHelper::DegreesToRadians(Euler.Y), Math::MathHelper::DegreesToRadians(Euler.Z));
+		BoneIndex++;
+	}
+
+	Writer.WriteLine("end");
+
+	Writer.Close();
+}
+
+void RpakLib::ExportQC(const RpakLoadAsset& Asset, const string& Path, const string& modelPath, const std::unique_ptr<Assets::Model>& Model, char* rmdlBuf, char* phyBuf)
+{
+	int AssetVersion = Asset.AssetVersion;
+	bool IsRig = Asset.AssetType == (uint32_t)AssetType_t::AnimationRig;
+
+	string extention = "";
+
+	if (IsRig) // stupid way of getting the highest Asset Version
+	{
+		int MaxVersion = 0;
+		for (auto& Asset : this->Assets)
 		{
-			char* pBodyPart = rmdlBuf + hdr->bodypartindex + (i * sizeof(mstudiobodyparts_t));
-			mstudiobodyparts_t* bodyPart = reinterpret_cast<mstudiobodyparts_t*>(pBodyPart);
-			char* bodyPartName = reinterpret_cast<char*>(pBodyPart + bodyPart->sznameindex);
+			auto& val = Asset.Value();
+			if (val.AssetType == (uint32_t)AssetType_t::Model && val.AssetVersion > MaxVersion)
+				MaxVersion = val.AssetVersion;
+		}
 
-			qc.WriteFmt("$bodygroup \"%s\"\n{\n", bodyPartName);
+		extention = this->AnimExporter->ModelExtension();
+		AssetVersion = MaxVersion;
+	}
+	else extention = this->ModelExporter->ModelExtension();
 
-			for (int j = 0; j < bodyPart->nummodels; ++j)
+	IO::StreamWriter qc(IO::File::Create(Path));
+
+	s3studiohdr_t hdr{};
+
+	switch (AssetVersion)
+	{
+	case 13:
+		hdr = reinterpret_cast<studiohdr_t_v13*>(rmdlBuf)->Downgrade();
+		break;
+	case 14:
+	case 15:
+		hdr = reinterpret_cast<studiohdr_t_v14*>(rmdlBuf)->Downgrade();
+		break;
+	case 16:
+	case 17:
+		hdr = reinterpret_cast<studiohdr_t_v16*>(rmdlBuf)->Downgrade();
+		break;
+	default:
+		if (Asset.SubHeaderSize == 0x68 && AssetVersion == 12)
+			hdr = reinterpret_cast<studiohdr_t_v121*>(rmdlBuf)->Downgrade();
+		else
+			hdr = *reinterpret_cast<s3studiohdr_t*>(rmdlBuf);
+		break;
+	}
+
+	qc.WriteFmt("$modelname \"%s\"\n\n", modelPath.ToCString());
+
+	string surfaceProp = string(rmdlBuf + hdr.surfacepropindex);
+
+	qc.Write("$maxverts 65535 65535\n\n");
+
+	qc.WriteFmt("$surfaceprop \"%s\"\n", surfaceProp.ToCString());
+
+	if (hdr.flags & STUDIOHDR_FLAGS_STATIC_PROP)
+		qc.WriteFmt("$staticprop\n\n");
+
+	if (hdr.flags & STUDIOHDR_FLAGS_FORCE_OPAQUE)
+		qc.Write("$opaque\n\n");
+
+	std::vector<std::string> BoneNames(hdr.numbones);
+	std::vector<mstudiobonev54_t> Bones(hdr.numbones);
+
+	uint64_t v16bonedataindex = 0;
+	if (AssetVersion >= 16)
+		v16bonedataindex = reinterpret_cast<studiohdr_t_v16*>(rmdlBuf)->bonedataindex;
+
+	for (int i = 0; i < hdr.numbones; i++)
+	{
+		char* pBone = rmdlBuf + hdr.boneindex;
+		if (AssetVersion <= 10)
+		{
+			pBone = pBone + (i * sizeof(mstudiobonev54_t));
+			mstudiobonev54_t Bone = *reinterpret_cast<mstudiobonev54_t*>(pBone);
+			BoneNames[i] = std::string(reinterpret_cast<char*>(pBone + Bone.sznameindex));
+			Bones[i] = Bone;
+		}
+		else if (AssetVersion < 16)
+		{
+			pBone = pBone + (i * sizeof(mstudiobonev54_t_v121));
+			mstudiobonev54_t_v121 Bone = *reinterpret_cast<mstudiobonev54_t_v121*>(pBone);
+			BoneNames[i] = std::string(reinterpret_cast<char*>(pBone + Bone.sznameindex));
+			Bones[i] = Bone.Downgrade();
+		}
+		else {
+			pBone = pBone + (i * sizeof(mstudiobone_t_v16));
+			mstudiobone_t_v16 Bone = *reinterpret_cast<mstudiobone_t_v16*>(pBone);
+			BoneNames[i] = std::string(reinterpret_cast<char*>(pBone + Bone.sznameindex));
+			mstudiobonedata_t_v16 BoneData = *reinterpret_cast<mstudiobonedata_t_v16*>(rmdlBuf + v16bonedataindex + (i * sizeof(mstudiobonedata_t_v16)));
+			mstudiobonev54_t out{};
+			out.ConstructFromV16(Bone, BoneData);
+			Bones[i] = out;
+
+			if (out.contents)
+				hdr.contents = out.contents;
+		}
+	}
+
+	qc.WriteFmt("$contents \"%s\"\n\n", (hdr.contents & 1) == 1 ? "solid" : "notsolid");
+
+	int jigglebonecount = 0;
+	for (int i = 0; i < hdr.numbones; i++)
+	{
+		if (Bones[i].proctype == 5) {
+			jigglebonecount++;
+		}
+	}
+
+	for (int BodyPartIndex = 0; BodyPartIndex < hdr.numbodyparts; BodyPartIndex++)
+	{
+		char* pBodyPart = rmdlBuf + hdr.bodypartindex;
+		mstudiobodyparts_t bodyPart{};
+		switch (AssetVersion)
+		{
+		case 15:
+			pBodyPart = pBodyPart + (BodyPartIndex * sizeof(mstudiobodyparts_t_v15));
+			bodyPart = reinterpret_cast<mstudiobodyparts_t_v15*>(pBodyPart)->Downgrade();
+			break;
+		case 16:
+		case 17:
+			pBodyPart = pBodyPart + (BodyPartIndex * sizeof(mstudiobodyparts_t_v16));
+			bodyPart = reinterpret_cast<mstudiobodyparts_t_v16*>(pBodyPart)->Downgrade();
+			break;
+		default:
+			pBodyPart = pBodyPart + (BodyPartIndex * sizeof(mstudiobodyparts_t));
+			bodyPart = *reinterpret_cast<mstudiobodyparts_t*>(pBodyPart);
+			break;
+		}
+
+		char* bodyPartName = reinterpret_cast<char*>(pBodyPart + bodyPart.sznameindex);
+
+		qc.WriteFmt("$bodygroup \"%s\"\n{\n", bodyPartName);
+
+		Assets::Model::BodyPartInfo Bodypart{};
+
+		List<mstudiomodelv54_t> BodyPartmodels;
+		for (int ModelIndex = 0; ModelIndex < bodyPart.nummodels; ModelIndex++)
+		{
+			char* pModel = pBodyPart + bodyPart.modelindex;
+			mstudiomodelv54_t model{};
+			Assets::Model::ModelInfo ModelInfo{};
+
+			switch (AssetVersion)
 			{
-				string baseModelName = IO::Path::GetFileNameWithoutExtension(modelPath);
-				mstudiomodelv54_t model = *reinterpret_cast<mstudiomodelv54_t*>(pBodyPart + bodyPart->modelindex + (j * sizeof(mstudiomodelv54_t)));
-
-				if (!*model.name)
-					qc.Write("\tblank\n");
+			case 13:
+				pModel = pModel + (ModelIndex * sizeof(mstudiomodelv54_t_v13));
+				model = reinterpret_cast<mstudiomodelv54_t_v13*>(pModel)->Downgrade();
+				break;
+			case 14:
+			case 15:
+				pModel = pModel + (ModelIndex * sizeof(mstudiomodelv54_t_v14));
+				model = reinterpret_cast<mstudiomodelv54_t_v14*>(pModel)->Downgrade();
+				break;
+			case 16:
+			case 17:
+				pModel = pModel + (ModelIndex * sizeof(mstudiomodelv54_t_v16));
+				model = reinterpret_cast<mstudiomodelv54_t_v16*>(pModel)->Downgrade();
+				break;
+			default:
+				if (Asset.SubHeaderSize == 0x68 && AssetVersion == 12)
+				{
+					pModel = pModel + (ModelIndex * sizeof(mstudiomodel_t_v54_v121));
+					model = reinterpret_cast<mstudiomodel_t_v54_v121*>(pModel)->Downgrade();
+				}
 				else
-					qc.WriteFmt("\tstudio \"%s_%s_%i_LOD0.smd\"\n", baseModelName.ToCString(), bodyPartName, j);
-
+				{
+					pModel = pModel + (ModelIndex * sizeof(mstudiomodelv54_t));
+					model = *reinterpret_cast<mstudiomodelv54_t*>(pModel);
+					break;
+				}
 			}
-			qc.Write("}\n\n");
+
+			BodyPartmodels.EmplaceBack(model);
+
+			if (model.nummeshes == 0)
+				continue;
+
+			for (int MeshIndex = 0; MeshIndex < model.nummeshes; MeshIndex++)
+			{
+				char* pMesh = pModel + model.meshindex;
+				mstudiomeshv54_t mesh{};
+
+				switch (AssetVersion)
+				{
+				case 16:
+				case 17:
+					pMesh = pMesh + (MeshIndex * sizeof(mstudiomeshv54_t_v16));
+					mesh = reinterpret_cast<mstudiomeshv54_t_v16*>(pMesh)->Downgrade();
+					break;
+				default:
+					if (AssetVersion <= 10)
+					{
+						pMesh = pMesh + (MeshIndex * sizeof(mstudiomeshv54_t));
+						mesh = *reinterpret_cast<mstudiomeshv54_t*>(pMesh);
+					}
+					else
+					{
+						pMesh = pMesh + (MeshIndex * sizeof(mstudiomeshv54_t_v121));
+						mesh = reinterpret_cast<mstudiomeshv54_t_v121*>(pMesh)->Downgrade();
+					}
+					break;
+				}
+
+				ModelInfo.MeshIndexes.EmplaceBack(mesh.meshid);
+			}
+
+			Bodypart.Models.EmplaceBack(ModelInfo);
 		}
 
-		qc.WriteFmt("$texturegroup \"skinfamilies\"\n{\n");
-		for (int i = 0; i < hdr->numskinfamilies; ++i)
+		Bodypart.Name = bodyPartName;
+
+		for (int ModelIndex = 0; ModelIndex < bodyPart.nummodels; ModelIndex++)
 		{
-			char* pSkinFamily = rmdlBuf + hdr->skinindex + (i * hdr->numskinref * sizeof(short));
+			mstudiomodelv54_t model = BodyPartmodels[ModelIndex];
 
-			char* skinName = (char*)"default";
-
-			if (i > 0)
+			if (model.nummeshes > 0)
 			{
-				int* pSkinNameIndex = reinterpret_cast<int*>(rmdlBuf + hdr->skinindex + (hdr->numskinfamilies * hdr->numskinref * sizeof(short)) + ((i - 1) * sizeof(int)));
-				skinName = rmdlBuf + *pSkinNameIndex;
+				if (bodyPart.nummodels >= 3)
+					qc.WriteFmt("\tstudio \"%s_%d%s\"\n", bodyPartName, ModelIndex - 1, extention.ToCString());
+				else
+					qc.WriteFmt("\tstudio \"%s%s\"\n", bodyPartName, extention.ToCString());
 			}
-
-			qc.WriteFmt("\t\"%s\" { ", skinName);
-			for (int j = 0; j < hdr->numskinref; ++j)
-			{
-				// texture index
-				short texId = *reinterpret_cast<short*>(pSkinFamily + (j * sizeof(short)));
-
-				// pointer to texture entry
-				char* pTexture = rmdlBuf + hdr->textureindex + (texId * sizeof(mstudiotexturev54_t));
-
-				// texture entry
-				mstudiotexturev54_t texture = *reinterpret_cast<mstudiotexturev54_t*>(pTexture);
-
-				// texture name
-				char* textureName = pTexture + texture.sznameindex;
-
-				qc.WriteFmt("\"%s\" ", textureName);
-			}
-			qc.Write("}\n");
+			else
+				qc.Write("\tblank\n");
 		}
+
+		Model->BodyParts.EmplaceBack(Bodypart);
+
 		qc.Write("}\n\n");
+	}
 
-		if (hdr->numlocalattachments)
-			qc.Write("// !!! attachment rotation angles may be wrong !!!\n");
-		for (int i = 0; i < hdr->numlocalattachments; ++i)
+	qc.WriteFmt("$eyeposition %f %f %f\n", hdr.eyeposition.X, hdr.eyeposition.Y, hdr.eyeposition.Z);
+	qc.WriteFmt("$illumposition %f %f %f\n\n", hdr.illumposition.X, hdr.illumposition.Y, hdr.illumposition.Z);
+
+	// keyvalues
+	if (hdr.keyvalueindex)
+	{
+		string KeyValues = string(rmdlBuf + hdr.keyvalueindex).Replace("mdlkeyvalue", "$keyvalues").Replace("}", " }").Replace("{", " { ");
+		qc.Write(string(KeyValues + "\n").ToCString());
+	}
+
+	qc.Write("$cdmaterials \"\"\n\n");
+
+	int MaxTextureResize = Model->Materials.Count() < hdr.numtextures ? hdr.numtextures : Model->Materials.Count();
+
+	std::vector<string> TextureNames(MaxTextureResize);
+	std::vector<string> TextureTypes(MaxTextureResize);
+
+	for (int i = 0; i < hdr.numtextures; i++)
+	{
+		char* pTexture = rmdlBuf + hdr.textureindex;
+		mstudiotexturev54_t texture{};
+
+		if (AssetVersion < 16)
 		{
-			// get attachment
-			char* pAttachment = rmdlBuf + hdr->localattachmentindex + (i * sizeof(mstudioattachmentv54_t));
-			mstudioattachmentv54_t* attachment = reinterpret_cast<mstudioattachmentv54_t*>(pAttachment);
+			pTexture = pTexture + (i * sizeof(mstudiotexturev54_t));
+			texture = *reinterpret_cast<mstudiotexturev54_t*>(pTexture);
+			TextureNames[i] = string(pTexture + texture.sznameindex);
+		}
+		else {
+			pTexture = pTexture + (i * sizeof(mstudiotexturev54_t_v16));
+			texture = reinterpret_cast<mstudiotexturev54_t_v16*>(pTexture)->Downgrade();
 
-			char* attachmentName = pAttachment + attachment->sznameindex;
+			if (Assets.ContainsKey(texture.guid))
+			{
+				RpakLoadAsset& MaterialAsset = Assets[texture.guid];
+				RMdlMaterial ParsedMaterial = this->ExtractMaterial(MaterialAsset, "", false, true, true);
 
-			// get attachment's bone
-			char* pBone = rmdlBuf + hdr->boneindex + (attachment->localbone * sizeof(mstudiobonev54_t));
-			mstudiobonev54_t* bone = reinterpret_cast<mstudiobonev54_t*>(pBone);
+				TextureTypes[i] = MaterialTypes[ParsedMaterial.MaterialType];
+				TextureNames[i] = ParsedMaterial.FullMaterialName.ToLower();
+			}
+			else
+			{
+				TextureTypes[i] = "";
+				TextureNames[i] = "";
+			}
 
-			char* boneName = pBone + bone->sznameindex;
+			continue;
+		}
 
-			Vector3 angles = attachment->localmatrix.GetRotationMatrixAsDegrees();
+		string temp = string(TextureNames[i].ToCString()).Replace("\\", "/");
 
-			qc.WriteFmt("$attachment \"%s\" \"%s\" %f %f %f rotate %f %f %f\n",
-				attachmentName,
-				boneName,
-				attachment->localmatrix.c3r0, attachment->localmatrix.c3r1, attachment->localmatrix.c3r2,
-				angles.X, angles.Y, angles.Z
+		TextureNames[i] = temp;
+		for (int z = 0; z < MaterialTypes.size(); z++)
+		{
+			string MatType = MaterialTypes[z].c_str();
+
+			if (temp.IndexOf(MatType) != -1)
+			{
+				TextureTypes[i] = MatType;
+				break;
+			}
+		}
+	}
+
+	if (Model != nullptr)
+	{
+		//qc.WriteFmt("//$texturegroup \"skinfamilies\"\n//{\n");
+		//
+		//for (int i = 0; i < hdr.numskinfamilies; i++)
+		//{
+		//	if (AssetVersion >= 16)
+		//		break;
+		//
+		//	char* pSkinFamily = rmdlBuf + hdr.skinindex + (i * hdr.numskinref * sizeof(short));
+		//
+		//	std::string skinName = "default";
+		//
+		//	if (i > 0)
+		//	{
+		//		int sizeofz = (hdr.numskinfamilies * hdr.numskinref * sizeof(short));
+		//		char* pSkinFamilies = (rmdlBuf + hdr.skinindex + sizeofz) + (sizeofz % 4);
+		//
+		//		int* pSkinNameIndex = reinterpret_cast<int*>(pSkinFamilies + ((i - 1) * 4));
+		//		skinName = std::string(rmdlBuf + *(pSkinNameIndex));
+		//	}
+		//
+		//	qc.WriteFmt("//\t\"%s\" { ", skinName.c_str());
+		//	for (int j = 0; j < hdr.numskinref; j++)
+		//	{
+		//		short texId = *reinterpret_cast<short*>(pSkinFamily + (j * sizeof(short)));
+		//		string TextureName = string(TextureNames[texId].ToCString()).Replace("\\", "/");
+		//
+		//		qc.WriteFmt("//\"%s\" ", TextureName.ToCString());
+		//	}
+		//
+		//	qc.Write("//}\n");
+		//}
+		//qc.Write("//}\n\n");
+
+
+		List<std::string> ValidTextures{};
+
+		for (Assets::Mesh& Submesh : Model->Meshes)
+		{
+			for (Assets::Face& Face : Submesh.Faces)
+			{
+				if (Submesh.MaterialIndices[0] > -1)
+				{
+					string Texture = Model->Materials[Submesh.MaterialIndices[0]].Name;
+
+					if (!ValidTextures.Contains(Texture.ToCString()))
+						ValidTextures.EmplaceBack(Texture.ToCString());
+				}	
+			}
+		}
+
+		for (int i = 0; i < ValidTextures.Count(); i++)
+		{
+			string ValidTexture = ValidTextures[i].c_str();
+			string MaterialName = IO::Path::GetFileNameWithoutExtension(ValidTexture);
+
+			ValidTexture = ValidTexture.Replace(TextureTypes[i].ToCString(), "") + TextureTypes[i];
+
+			qc.WriteFmt("$renamematerial \"%s\" \"%s\"\n", MaterialName.Replace(TextureTypes[i].ToCString(), "").ToCString(), ValidTexture.ToCString());
+		}
+
+		qc.Write("\n");
+	}
+
+	qc.WriteFmt("$unlockdefinebones\n\n");
+
+	for (int i = 0; i < hdr.numbones; i++)
+	{
+		std::string BoneParentName = "";
+		std::string BoneName = BoneNames[i];
+
+		mstudiobonev54_t& bone = Bones[i];
+
+		if (bone.parent != -1)
+			BoneParentName = BoneNames[bone.parent];
+
+		qc.WriteFmt("$definebone \"%s\" \"%s\" %f %f %f %f %f %f 0 0 0 0 0 0\n", BoneName.c_str(), BoneParentName.c_str(), bone.pos.X, bone.pos.Y, bone.pos.Z, RadiansToDegrees(bone.rot.X), RadiansToDegrees(bone.rot.Y), RadiansToDegrees(bone.rot.Z));
+	}
+	qc.Write("\n");
+
+	for (int i = 0; i < hdr.numbones; i++)
+	{
+		std::string BoneName = BoneNames[i];
+		qc.WriteFmt("$bonemerge \"%s\" \n", BoneName.c_str());
+	}
+	qc.Write("\n");
+
+	if (hdr.numlocalattachments)
+		qc.Write("// !!! attachment rotation angles may be wrong !!!\n");
+	for (int i = 0; i < hdr.numlocalattachments; i++)
+	{
+		// get attachment
+		char* pAttachment = rmdlBuf + hdr.localattachmentindex;
+		mstudioattachmentv54_t attachment{};
+
+		if (AssetVersion < 16)
+		{
+			pAttachment = pAttachment + (i * sizeof(mstudioattachmentv54_t));
+			attachment = *reinterpret_cast<mstudioattachmentv54_t*>(pAttachment);
+		}
+		else
+		{
+			pAttachment = pAttachment + (i * sizeof(mstudioattachmentv54_t_v16));
+			attachment = reinterpret_cast<mstudioattachmentv54_t_v16*>(pAttachment)->Downgrade();
+		}
+
+		char* attachmentName = pAttachment + attachment.sznameindex;
+
+		// get attachment's bone
+		Vector3 angles = attachment.localmatrix.GetRotationMatrixAsDegrees();
+
+		qc.WriteFmt("$attachment \"%s\" \"%s\" %f %f %f rotate %f %f %f\n",
+			attachmentName,
+			BoneNames[attachment.localbone].c_str(),
+			attachment.localmatrix.c3r0, attachment.localmatrix.c3r1, attachment.localmatrix.c3r2,
+			angles.X, angles.Y, angles.Z
+		);
+	}
+
+	if (hdr.numlocalattachments)
+		qc.Write("\n");
+
+	for (int i = 0; i < jigglebonecount; i++)
+	{
+		char* pBones = nullptr;
+		if (AssetVersion <= 10)
+			pBones = rmdlBuf + hdr.boneindex + (hdr.numbones * sizeof(mstudiobonev54_t));
+		else if (AssetVersion < 16)
+			pBones = rmdlBuf + hdr.boneindex + (hdr.numbones * sizeof(mstudiobonev54_t_v121));
+		else
+			pBones = rmdlBuf + v16bonedataindex + (hdr.numbones * sizeof(mstudiobonedata_t_v16));
+
+		mstudiojigglebonev54_t* JiggleBone = reinterpret_cast<mstudiojigglebonev54_t*>(pBones + (i * sizeof(mstudiojigglebonev54_t)));
+
+		qc.WriteFmt("$jigglebone \"%s\"\n{\n", BoneNames[JiggleBone->bone].c_str());
+
+		WriteJiggleBoneData(qc, JiggleBone);
+
+		qc.Write("}\n\n");
+	}
+
+	for (int i = 0; i < hdr.numhitboxsets; i++)
+	{
+		char* pHitboxSet = rmdlBuf + hdr.hitboxsetindex;
+		mstudiohitboxset_t hitboxSet{};
+
+		if (AssetVersion < 16)
+		{
+			pHitboxSet = pHitboxSet + (i * sizeof(mstudiohitboxset_t));
+			hitboxSet = *reinterpret_cast<mstudiohitboxset_t*>(pHitboxSet);
+		}
+		else
+		{
+			pHitboxSet = pHitboxSet + (i * sizeof(mstudiohitboxset_t_v16));
+			hitboxSet = reinterpret_cast<mstudiohitboxset_t_v16*>(pHitboxSet)->Downgrade();
+		}
+
+		// get hboxset name
+		char* hitboxSetName = pHitboxSet + hitboxSet.sznameindex;
+
+		qc.WriteFmt("$hboxset \"%s\"\n", hitboxSetName);
+
+		for (int j = 0; j < hitboxSet.numhitboxes; j++)
+		{
+			mstudiobboxv54_t hitbox{};
+
+			char* pHitbox = nullptr;
+
+			if (AssetVersion < 16)
+			{
+				pHitbox = pHitboxSet + (j * sizeof(mstudiobboxv54_t));
+				hitbox = *reinterpret_cast<mstudiobboxv54_t*>(pHitbox + hitboxSet.hitboxindex);
+			}
+			else
+			{
+				pHitbox = pHitboxSet + (j * sizeof(mstudiobboxv54_t_v16));
+				hitbox = reinterpret_cast<mstudiobboxv54_t_v16*>(pHitbox + hitboxSet.hitboxindex)->Downgrade();
+			}
+
+			qc.WriteFmt("$hbox %i \"%s\" %f %f %f %f %f %f\n",
+				hitbox.group,
+				BoneNames[hitbox.bone].c_str(),
+				hitbox.bbmin.X, hitbox.bbmin.Y, hitbox.bbmin.Z,
+				hitbox.bbmax.X, hitbox.bbmax.Y, hitbox.bbmax.Z
 			);
 		}
 		qc.Write("\n");
+	}
 
-		for (int i = 0; i < hdr->numhitboxsets; ++i)
+	List<string> PoseParameters;
+	char* pPoseParams = rmdlBuf + hdr.localposeparamindex;
+	for (int i = 0; i < hdr.numlocalposeparameters; i++)
+	{
+		mstudioposeparamdescv54_t PoseParam{};
+
+		char* pPoseParam = nullptr;
+		if (AssetVersion < 16)
 		{
-			char* pHitboxSet = rmdlBuf + hdr->hitboxsetindex + (i * sizeof(mstudiohitboxset_t));
-			mstudiohitboxset_t* hitboxSet = reinterpret_cast<mstudiohitboxset_t*>(pHitboxSet);
+			pPoseParam = pPoseParams + (i * sizeof(mstudioposeparamdescv54_t));
+			PoseParam = *reinterpret_cast<mstudioposeparamdescv54_t*>(pPoseParam);
+		}
+		else {
+			pPoseParam = pPoseParams + (i * sizeof(mstudioposeparamdescv54_t_v16));
+			PoseParam = reinterpret_cast<mstudioposeparamdescv54_t_v16*>(pPoseParam)->Downgrade();
+			PoseParam.sznameindex = FIX_OFFSET(PoseParam.sznameindex);
+		}
 
-			// get hboxset name
-			char* hitboxSetName = pHitboxSet + hitboxSet->sznameindex;
+		string PoseName = string(pPoseParam + PoseParam.sznameindex);
 
-			qc.WriteFmt("$hboxset \"%s\"\n\n", hitboxSetName);
+		qc.WriteFmt("$poseparameter \"%s\" %.4f %.4f", PoseName.ToCString(), PoseParam.start, PoseParam.start);
 
-			for (int j = 0; j < hitboxSet->numhitboxes; ++j)
-			{
-				char* pHitbox = pHitboxSet + hitboxSet->hitboxindex + (j * sizeof(mstudiobboxv54_t));
-				mstudiobboxv54_t* hitbox = reinterpret_cast<mstudiobboxv54_t*>(pHitbox);
+		if (PoseParam.flags & STUDIO_LOOPING)
+			qc.WriteFmt(" loop %f", PoseParam.loop);
 
-				// get bone name
-				char* pBone = rmdlBuf + hdr->boneindex + (hitbox->bone * sizeof(mstudiobonev54_t));
-				mstudiobonev54_t* bone = reinterpret_cast<mstudiobonev54_t*>(pBone);
-				char* boneName = pBone + bone->sznameindex;
+		qc.Write("\n");
 
-				qc.WriteFmt("$hbox %i \"%s\" %f %f %f %f %f %f\n",
-					hitbox->group,
-					boneName,
-					hitbox->bbmin.X, hitbox->bbmin.Y, hitbox->bbmin.Z,
-					hitbox->bbmax.X, hitbox->bbmax.Y, hitbox->bbmax.Z
-				);
-			}
-			qc.Write("\n");
+		PoseParameters.EmplaceBack(PoseName);
+	}
+
+	if (hdr.numlocalposeparameters)
+		qc.Write("\n");
+
+	qc.WriteFmt("$sequence \"ref\" \"%s_ref%s\" \n\n", Model->Name.ToCString(), extention.ToCString());
+
+	SMDWriteRefAnim(Path, Model->Bones, Model->Name);
+
+	if (IsRig)
+	{
+		auto RpakStream = this->GetFileStream(Asset);
+		IO::BinaryReader Reader = IO::BinaryReader(RpakStream.get(), true);
+
+		RpakStream->SetPosition(this->GetFileOffset(Asset, Asset.SubHeaderIndex, Asset.SubHeaderOffset));
+		AnimRigHeader RigHeader{};
+		RigHeader.ReadFromAssetStream(&RpakStream, Asset.AssetVersion);
+
+		const uint64_t ReferenceOffset = this->GetFileOffset(Asset, RigHeader.animSeqs);
+
+		List<uint64_t> Hashes;
+		List<string> AnimationNames;
+
+		for (uint32_t i = 0; i < RigHeader.animSeqCount; i++)
+		{
+			RpakStream->SetPosition(ReferenceOffset + ((uint64_t)i * 0x8));
+
+			uint64_t AnimHash = Reader.Read<uint64_t>();
+
+			if (AnimHash == 0xDF5 || !Assets.ContainsKey(AnimHash))
+				continue;
+
+			this->QCWriteAseqData(qc, Path, AnimHash, Asset, {}, AnimationNames, true);
+
+			Hashes.EmplaceBack(AnimHash);
+		}
+
+		Hashes.Clear();
+		AnimationNames.Clear();
+		for (uint32_t i = 0; i < RigHeader.animSeqCount; i++)
+		{
+			RpakStream->SetPosition(ReferenceOffset + ((uint64_t)i * 0x8));
+
+			uint64_t AnimHash = Reader.Read<uint64_t>();
+
+			if (AnimHash == 0xDF5 || !Assets.ContainsKey(AnimHash))
+				continue;
+
+			this->QCWriteAseqData(qc, Path, AnimHash, Asset, PoseParameters, AnimationNames, false);
+
+			Hashes.EmplaceBack(AnimHash);
 		}
 	}
 
 	qc.Close();
+}
+
+void RpakLib::QCWriteAseqData(IO::StreamWriter& qc, const string& Path, uint64_t AnimHash, const RpakLoadAsset& RigAsset, List<string> PoseParameters, List<string>& AnimationNames, bool WriteAnimations)
+{
+	if (this->Assets.ContainsKey(AnimHash))
+	{
+		RpakLoadAsset AseqAsset = this->Assets[AnimHash];
+		std::unique_ptr<IO::MemoryStream> RpakStream = this->GetFileStream(AseqAsset);
+		IO::BinaryReader Reader = IO::BinaryReader(RpakStream.get(), true);
+		RpakStream->SetPosition(this->GetFileOffset(AseqAsset, AseqAsset.SubHeaderIndex, AseqAsset.SubHeaderOffset));
+
+		ASeqHeaderV10 AnHeader{};
+		switch (AseqAsset.SubHeaderSize)
+		{
+		case 0x30: // 7
+			AnHeader = Reader.Read<ASeqHeader>().Upgrade();
+			break;
+		case 0x38: // 7.1
+			AnHeader = Reader.Read<ASeqHeaderV71>().Upgrade();
+			break;
+		case 0x40: // 10
+			AnHeader = Reader.Read<ASeqHeaderV10>();
+			break;
+		}
+
+		RpakStream->SetPosition(this->GetFileOffset(AseqAsset, AnHeader.pName));
+		string AnimSetNameFull = Reader.ReadCString().Replace(".rseq", "");
+		string AnimSetName = IO::Path::GetFileNameWithoutExtension(AnimSetNameFull);
+		string AnimSetNameDir = IO::Path::GetDirectoryName(AnimSetNameFull).ToCString();
+		string FolderPath = IO::Path::Combine(IO::Path::GetDirectoryName(AnimSetNameFull), IO::Path::GetFileNameWithoutExtension(AnimSetNameFull)).Replace("\\", "/");
+
+		uint64_t AseqDataOffset = this->GetFileOffset(AseqAsset, AnHeader.pAnimation);
+		RpakStream->SetPosition(AseqDataOffset);
+		mstudioseqdesc_t_v16 seqdesc{};
+
+		if (AseqAsset.AssetVersion < 11)
+			seqdesc = Reader.Read<mstudioseqdesc_t>().Upgrade();
+		else
+			seqdesc = Reader.Read<mstudioseqdesc_t_v16>();
+
+		int blends = seqdesc.groupsize[0] * seqdesc.groupsize[1];
+
+		List<mstudioanimdescv54_t_v16> AnimDescs;
+		List<string> AnimNames{};
+		for (int i = 0; i < blends; i++)
+		{
+			RpakStream->SetPosition(AseqDataOffset + seqdesc.animindexindex);
+
+			uint64_t blendoffset = 0;
+			if (AseqAsset.AssetVersion <= 10)
+			{
+				RpakStream->SetPosition(RpakStream->GetPosition() + (i * sizeof(int)));
+				blendoffset = Reader.Read<int>();
+			}
+			else
+			{
+				RpakStream->SetPosition(RpakStream->GetPosition() + (i * sizeof(short)));
+				blendoffset = Reader.Read<short>();
+			}
+
+			RpakStream->SetPosition(AseqDataOffset + blendoffset);
+
+			mstudioanimdescv54_t_v16 animdesc{};
+
+			switch (AseqAsset.SubHeaderSize)
+			{
+			case 0x30: // 7
+				animdesc = Reader.Read<mstudioanimdescv54_t>().Upgrade();
+				break;
+			case 0x38: // 7.1
+			case 0x40: // 10
+			{
+				if (AseqAsset.AssetVersion <= 10)
+					animdesc = Reader.Read<mstudioanimdescv54_t_v121>().Upgrade();
+				else
+				{
+					animdesc = Reader.Read<mstudioanimdescv54_t_v16>();
+					animdesc.sznameindex = FIX_OFFSET((int)animdesc.sznameindex);
+				}
+
+				break;
+			}
+			}
+
+			RpakStream->SetPosition(AseqDataOffset + blendoffset + animdesc.sznameindex);
+			string namez = Reader.ReadCString();
+
+			AnimNames.EmplaceBack(namez);
+			AnimDescs.EmplaceBack(animdesc);
+		}
+
+		List<mstudioanimdescv54_t_v16> ValidAnimDescs;
+		List<string> ValidAnimNames;
+		for (int i = 0; i < AnimDescs.Count(); i++)
+		{
+			string directory = string::Format("%s\\Anims\\%s\\%s.smd", IO::Path::GetDirectoryName(Path).ToCString(), AnimSetName.ToCString(), AnimNames[i].ToCString());
+
+			if (IO::File::Exists(directory))
+			{
+				ValidAnimDescs.EmplaceBack(AnimDescs[i]);
+				ValidAnimNames.EmplaceBack(AnimNames[i]);
+			}
+		}
+		AnimNames = ValidAnimNames;
+		AnimDescs = ValidAnimDescs;
+
+		if (!AnimDescs.Count())
+			return;
+
+		if (WriteAnimations)
+		{
+			// seperator
+			for (int i = 0; i < AnimDescs.Count(); i++)
+			{
+				mstudioanimdescv54_t_v16 AnimDesc = AnimDescs[i];
+
+				if (!(AnimDesc.flags & STUDIO_ALLZEROS) && !AnimationNames.Contains(AnimNames[i]))
+				{
+					AnimationNames.EmplaceBack(AnimNames[i]);
+
+					qc.WriteFmt("$animation \"%s\" \"Anims/%s/%s.smd\" {\n", AnimNames[i].ToCString(), AnimSetName.ToCString(), AnimNames[i].ToCString());
+					{
+						qc.WriteFmt("\tfps %d\n", int(AnimDesc.fps + 1.0));
+
+						if (AnimDesc.flags & STUDIO_LOOPING)
+							qc.Write("\tloop\n");
+
+						if (AnimDesc.flags & STUDIO_NOFORCELOOP)
+							qc.Write("\tnoforceloop\n");
+
+						if (AnimDesc.flags & STUDIO_SNAP)
+							qc.Write("\tsnap\n");
+
+						if (AnimDesc.flags & STUDIO_POST)
+							qc.Write("\tpost\n");
+
+						qc.Write("\n}\n\n");
+					}
+				}
+			}
+
+			return;
+		}
+
+		qc.WriteFmt("$sequence \"%s\" {\n", AnimSetNameFull.ToCString());
+		{
+			for (int i = 0; i < 1; i++)
+			{
+				if (!(AnimDescs[i].flags & STUDIO_ALLZEROS))
+					qc.WriteFmt("\t\"%s\"\n", AnimNames[i].ToCString());
+			}
+
+			qc.Write("\n\n");
+
+			// activity weight will never be 0 if an activity is set
+			if (seqdesc.actweight)
+			{
+				RpakStream->SetPosition(AseqDataOffset + seqdesc.szactivitynameindex);
+				qc.WriteFmt("\tactivity %s %d\n\n", Reader.ReadCString().ToCString(), seqdesc.actweight);
+			}
+
+			//if (seqdesc.flags & STUDIO_LOOPING)
+			//	qc.Write("\tloop\n\n");
+			//
+			//if (seqdesc.flags & STUDIO_NOFORCELOOP)
+			//	qc.Write("\tnoforceloop\n\n");
+			//
+			//if (seqdesc.flags & STUDIO_SNAP)
+			//	qc.Write("\tsnap\n\n");
+
+			qc.WriteFmt("\tfadein %.1f\n\tfadeout %.1f\n\n", seqdesc.fadeintime, seqdesc.fadeouttime);
+
+			// ACTIVITY MODIFIERS
+			{
+				if (seqdesc.numactivitymodifiers)
+					qc.Write("\n");
+
+				for (int i = 0; i < seqdesc.numactivitymodifiers; i++)
+				{
+					uint64_t offset = AseqDataOffset + seqdesc.activitymodifierindex;
+
+					if (AseqAsset.AssetVersion > 10)
+						offset += (i * sizeof(mstudioactivitymodifierv54_t_v16));
+					else
+						offset += (i * sizeof(mstudioactivitymodifierv53_t));
+
+					RpakStream->SetPosition(offset);
+
+					mstudioactivitymodifierv53_t layer{};
+					if (AseqAsset.AssetVersion < 10)
+						layer = Reader.Read<mstudioactivitymodifierv53_t>();
+					else
+						layer = Reader.Read<mstudioactivitymodifierv54_t_v16>().Downgrade();
+
+					RpakStream->SetPosition(offset + layer.sznameindex);
+					string ActivityMod = Reader.ReadCString();
+
+					if (!string::IsNullOrEmpty(ActivityMod))
+						qc.WriteFmt("\tactivitymodifier %s\n", ActivityMod.ToCString());
+				}
+
+				if (seqdesc.numactivitymodifiers)
+					qc.Write("\n");
+			}
+
+			// AUTO LAYERS
+			{
+				if (seqdesc.numautolayers)
+					qc.Write("\n");
+
+				for (int i = 0; i < seqdesc.numautolayers; i++)
+				{
+					RpakStream->SetPosition(AseqDataOffset + seqdesc.autolayerindex + (i * sizeof(mstudioautolayerv54_t)));
+					mstudioautolayerv54_t layer = Reader.Read<mstudioautolayerv54_t>();
+
+					if (this->Assets.ContainsKey(layer.guidSequence))
+					{
+						auto& LayerAsset = this->Assets[layer.guidSequence];
+
+						std::string options = "";
+
+						if (layer.flags & STUDIO_AL_XFADE)
+							options += " xfade";
+
+						if (layer.flags & STUDIO_AL_SPLINE)
+							options += " spline";
+
+						if (layer.flags & STUDIO_AL_NOBLEND)
+							options += " noblend";
+
+						if (layer.flags & STUDIO_AL_LOCAL)
+							options += " local";
+
+						int start = 0;
+						int peak = 0;
+						int tail = 0;
+						int end = 0;
+
+						if (layer.flags & STUDIO_AL_POSE)
+						{
+							options += string::Format(" poseparameter %s", PoseParameters[layer.iPose].ToCString());
+
+							mstudioanimdescv54_t_v16 AnimDesc = AnimDescs[0];
+
+							start = (int)(layer.start * (AnimDesc.fps * -1));
+							peak = (int)(layer.peak * (AnimDesc.fps * -1));
+							tail = (int)(layer.tail * (AnimDesc.fps * -1));
+							end = (int)(layer.end * (AnimDesc.fps * -1));
+						}
+						else
+						{
+							start = (int)layer.start;
+							peak = (int)layer.peak;
+							tail = (int)layer.tail;
+							end = (int)layer.end;
+						}
+
+						qc.WriteFmt("\n\taddlayer \"%s\"", this->ExtractAnimationSeq(LayerAsset).Replace(".rseq", "").ToCString());
+					}
+					else
+					{
+						qc.WriteFmt("\t//blendlayer LAYER NOT FOUND IN LOADED RPAKs\n");
+					}
+				}
+
+				if (seqdesc.numautolayers)
+					qc.Write("\n\n");
+			}
+
+			// EVENTS
+			{
+				for (int i = 0; i < seqdesc.numevents; i++)
+				{
+					mstudioeventv54 Event{};
+					if (AseqAsset.AssetVersion <= 10)
+					{
+						switch (AseqAsset.SubHeaderSize)
+						{
+						case 0x30: // 7 / 7.1
+						case 0x38:
+							RpakStream->SetPosition(AseqDataOffset + seqdesc.eventindex + (i * sizeof(mstudioeventv54_t)));
+							break;
+						case 0x40: // 10
+							RpakStream->SetPosition(AseqDataOffset + seqdesc.eventindex + (i * sizeof(mstudioeventv54_t_v122)));
+							break;
+						}
+					}
+					else
+					{
+						RpakStream->SetPosition(AseqDataOffset + seqdesc.eventindex + (i * sizeof(mstudioeventv54_t_v16)));
+					}
+
+					Event.Init(AseqAsset.AssetVersion, AseqAsset.SubHeaderSize, Reader);
+
+					// disabled for now until a fix is found to get the correct frame
+					int frame_reversed = 0;//(int)(Event.cycle * float(AnimDescs[0].fps - 1));
+
+					qc.WriteFmt("\t{ event %s %d \"%s\" }\n", Event.szevent.ToCString(), frame_reversed, Event.szoptions.ToCString());
+				}
+
+				qc.Write("\n}\n\n");
+			}
+		}
+	}
 }

@@ -27,24 +27,66 @@ void RpakLib::BuildModelInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 
 	if (Asset.AssetVersion < 16)
 	{
-		studiohdr_t studiohdr = Reader.Read<studiohdr_t>();
+		studiohdr_t studiohdr{};
+
+		if (Asset.SubHeaderSize == 120)
+			studiohdr.FromS3(Reader.Read<s3studiohdr_t>());
+		else if (Asset.AssetVersion <= 12)
+			studiohdr = Reader.Read<studiohdr_t>();
+		else
+		{
+			switch (Asset.AssetVersion)
+			{
+			case 13:
+				studiohdr.FromV13(Reader.Read<studiohdr_t_v13>());
+				break;
+			case 14:
+			case 15:
+				studiohdr.FromV14(Reader.Read<studiohdr_t_v14>());
+				break;
+			default:
+				break;
+			}
+		}
 
 		Info.Info = string::Format("Bones: %d, Parts: %d", studiohdr.numbones, studiohdr.numbodyparts);
 
+		if (mdlHdr.animRigCount > 0)
+			Info.Info += string::Format(", Rigs: %d", mdlHdr.animRigCount);
+
 		if (mdlHdr.animSeqCount > 0)
 			Info.Info += string::Format(", Animations: %d", mdlHdr.animSeqCount);
+
+		if (studiohdr.numskinfamilies > 1 && Asset.AssetVersion != 14)
+			Info.Info += string::Format(", Skins: %d", studiohdr.numskinfamilies);
+
+		if (mdlHdr.phyData.Index > 0)
+			Info.DebugInfo += string::Format("Physics: True");
 	}
 	else
 	{
 		studiohdr_t_v16 studiohdr = Reader.Read<studiohdr_t_v16>();
 
+		ModelCPU cpuData{};
+		if (Asset.RawDataIndex || Asset.RawDataOffset)
+		{
+			RpakStream->SetPosition(this->GetFileOffset(Asset, Asset.RawDataIndex, Asset.RawDataOffset));
+			cpuData = Reader.Read<ModelCPU>();
+		}
+
 		Info.Info = string::Format("Bones: %d, Parts: %d", studiohdr.numbones, studiohdr.numbodyparts);
+
+		if (mdlHdr.animRigCount > 0)
+			Info.Info += string::Format(", Rigs: %d", mdlHdr.animRigCount);
 
 		if (mdlHdr.animSeqCount > 0)
 			Info.Info += string::Format(", Animations: %d", mdlHdr.animSeqCount);
 
 		if (studiohdr.numskinfamilies > 1)
 			Info.Info += string::Format(", Skins: %d", studiohdr.numskinfamilies);
+
+		if (cpuData.phyDataSize > 0)
+			Info.DebugInfo += string::Format("Physics: True");
 	}
 }
 
@@ -60,8 +102,6 @@ void RpakLib::ExportModel(const RpakLoadAsset& Asset, const string& Path, const 
 			this->ModelExporter->ExportModel(*Model.get(), DestinationPath);
 	}
 }
-
-#define FIX_OFFSET(offset) ((offset & 0xFFFE) << (4 * (offset & 1)))
 
 std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& Asset, const string& Path, const string& AnimPath, bool IncludeMaterials, bool IncludeAnimations)
 {
@@ -111,7 +151,6 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& As
 				g_Logger.Info("Seq %d -> %s\n", i, this->ExtractAnimationSeq(Assets[SeqGuid]).ToCString());
 			else
 				g_Logger.Info("Seq %d -> %llx\n", i, SeqGuid);
-
 		}
 		g_Logger.Info("======================\n");
 	}
@@ -148,12 +187,6 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& As
 	std::unique_ptr<char[]> studioBuf(new char[cpuData.modelLength]);
 
 	Reader.Read(studioBuf.get(), 0, cpuData.modelLength);
-
-	// write QC file when exporting as SMD
-	if (Path != "" && AnimPath != "" && ModelFormat == ModelExportFormat_t::SMD)
-	{
-		this->ExportQC(Asset.AssetVersion, BaseFileName + ".qc", RawModelName, studioBuf.get(), nullptr);
-	}
 
 	if (Path != "" && AnimPath != "" && ModelFormat == ModelExportFormat_t::RMDL)
 	{
@@ -253,7 +286,7 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& As
 
 	for (int i = 0; i < studiohdr.numtextures; ++i)
 	{
-		materials.EmplaceBack(mstudiomaterial_t{ MaterialBuffer[i], ""});
+		materials.EmplaceBack(mstudiomaterial_t{ MaterialBuffer[i], "" });
 	}
 
 	RMdlFixupPatches Fixups{};
@@ -301,7 +334,7 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& As
 		IO::Stream* StarpakStream = StarpakReader.GetBaseStream();
 
 		if (streamedDataSize)
-		{	
+		{
 			// loop through all lods for full vg size
 			for (int i = 0; i < studiohdr.numvgloddata; i++)
 			{
@@ -379,11 +412,9 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& As
 		if (Assets.ContainsKey(material.guid))
 		{
 			RpakLoadAsset& MaterialAsset = Assets[material.guid];
-			bool bExportAllMaterials = ExportManager::Config.GetBool("SkinExport") ? IncludeMaterials : false;
 
-			this->ExportMaterialCPU(MaterialAsset, TexturePath);
-			RMdlMaterial ParsedMaterial = this->ExtractMaterial(MaterialAsset, TexturePath, bExportAllMaterials, false);
-			uint32_t MaterialIndex = Model->AddMaterial(ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
+			RMdlMaterial ParsedMaterial = this->ExtractMaterial(MaterialAsset, TexturePath, false, false);
+			uint32_t MaterialIndex = Model->AddMaterial(ModelFormat == ModelExportFormat_t::SMD ? ParsedMaterial.FullMaterialName : ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
 
 			material.name = ParsedMaterial.MaterialName;
 
@@ -416,7 +447,6 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& As
 				maxMaterialLength = material.name.Length();
 		}
 	}
-
 
 	if (studiohdr.numskinfamilies > 0)
 	{
@@ -456,9 +486,15 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel_V16(const RpakLoadAsset& As
 		}
 	}
 
+	bool bExportAllMaterials = ExportManager::Config.GetBool("ModelMatExport") ? IncludeMaterials : false;
+
 	IO::BinaryReader vgReader = IO::BinaryReader(vgStream.get(), true);
-	if(lods.front().numMeshes > 0)
-		this->ExtractModelLod_V16(vgReader, RpakStream, ModelName, vgStream->GetPosition(), Model, Fixups, Asset.AssetVersion, IncludeMaterials);
+	if (lods.front().numMeshes > 0)
+		this->ExtractModelLod_V16(vgReader, RpakStream, ModelName, vgStream->GetPosition(), Model, Fixups, Asset.AssetVersion, bExportAllMaterials);
+
+	// write QC file when exporting as SMD
+	if (Path != "" && AnimPath != "" && ModelFormat == ModelExportFormat_t::SMD)
+		this->ExportQC(Asset, BaseFileName + ".qc", RawModelName, Model, studioBuf.get(), nullptr);
 
 	vgStream->Close();
 
@@ -508,7 +544,6 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel(const RpakLoadAsset& Asset,
 				g_Logger.Info("Seq %d -> %s\n", i, this->ExtractAnimationSeq(Assets[SeqGuid]).ToCString());
 			else
 				g_Logger.Info("Seq %d -> %llx\n", i, SeqGuid);
-
 		}
 		g_Logger.Info("======================\n");
 	}
@@ -537,19 +572,32 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel(const RpakLoadAsset& Asset,
 
 	RpakStream->SetPosition(StudioOffset);
 
-	studiohdr_t studiohdr = Reader.Read<studiohdr_t>();
+	studiohdr_t studiohdr{};
+
+	if (Asset.AssetVersion > 12)
+	{
+		switch (Asset.AssetVersion)
+		{
+		case 13:
+			studiohdr.FromV13(Reader.Read<studiohdr_t_v13>());
+			break;
+		case 14:
+			studiohdr.FromV14(Reader.Read<studiohdr_t_v14>());
+			break;
+		default:
+			break;
+		}
+	}
+	else if (Asset.SubHeaderSize != 120)
+		studiohdr = Reader.Read<studiohdr_t>();
+	else
+		studiohdr.FromS3(Reader.Read<s3studiohdr_t>());
 
 	RpakStream->SetPosition(StudioOffset);
 
 	std::unique_ptr<char[]> studioBuf(new char[studiohdr.length]);
 
 	Reader.Read(studioBuf.get(), 0, studiohdr.length);
-
-	// write QC file when exporting as SMD
-	if (Path != "" && AnimPath != "" && ModelFormat == ModelExportFormat_t::SMD)
-	{
-		this->ExportQC(Asset.AssetVersion, BaseFileName + ".qc", RawModelName, studioBuf.get(), nullptr);
-	}
 
 	if (Path != "" && AnimPath != "" && ModelFormat == ModelExportFormat_t::RMDL)
 	{
@@ -621,17 +669,27 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel(const RpakLoadAsset& Asset,
 
 	studiohdr_t SkeletonHeader{};
 
-	if (Asset.SubHeaderSize != 120)
+	switch (Asset.AssetVersion)
 	{
-		SkeletonHeader = Reader.Read<studiohdr_t>();
-	}
-	else {
-		s3studiohdr_t TempSkeletonHeader = Reader.Read<s3studiohdr_t>();
+	case 13:
+		SkeletonHeader.FromV13(Reader.Read<studiohdr_t_v13>());
+		break;
+	case 14:
+		SkeletonHeader.FromV14(Reader.Read<studiohdr_t_v14>());
+		break;
+	default:
+		if (Asset.SubHeaderSize == 0x68 && Asset.AssetVersion == 12) // 12.1
+		{
+			SkeletonHeader.FromV121(Reader.Read<studiohdr_t_v121>());
+		}
+		else if (Asset.SubHeaderSize != 0x78)
+		{
+			SkeletonHeader = Reader.Read<studiohdr_t>();
+		}
+		else
+			SkeletonHeader.FromS3(Reader.Read<s3studiohdr_t>());
 
-		memcpy(&SkeletonHeader, &TempSkeletonHeader, 0x110);
-
-		SkeletonHeader.SubmeshLodsOffset = TempSkeletonHeader.meshindex;
-		SkeletonHeader.BoneRemapCount = 0; // s3 doesnt use these from here
+		break;
 	}
 
 	uint32_t SubmeshLodsOffset = SkeletonHeader.SubmeshLodsOffset;
@@ -639,14 +697,6 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel(const RpakLoadAsset& Asset,
 	uint32_t TexturesCount = SkeletonHeader.numtextures;
 	uint32_t BoneRemapCount = SkeletonHeader.BoneRemapCount;
 	uint32_t BoneRemapOffset = SkeletonHeader.OffsetToBoneRemapInfo;
-
-	if (Asset.AssetVersion >= 14)
-	{
-		SubmeshLodsOffset = SkeletonHeader.SubmeshLodsOffset_V14;
-		TexturesOffset = SkeletonHeader.cdtextureindex;
-		TexturesCount = SkeletonHeader.numcdtextures;
-		BoneRemapCount = SkeletonHeader.BoneRemapCount_V14;
-	}
 
 	RpakStream->SetPosition(StudioOffset + TexturesOffset);
 
@@ -772,17 +822,17 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel(const RpakLoadAsset& Asset,
 			vgOut.write(vgBuf, VGHeader.DataSize);
 			vgOut.close();
 
-			RpakStream->SetPosition(StudioOffset);
-
-			s3studiohdr_t hdr = Reader.Read<s3studiohdr_t>();
-
-			for (int i = 0; i < hdr.numtextures; i++)
-			{
-				mstudiotexturev54_t* mat = reinterpret_cast<mstudiotexturev54_t*>(studioBuf.get() + hdr.textureindex + (i * sizeof(mstudiotexturev54_t)));
-
-				//if(Assets.ContainsKey(mat->guid))
-				//	this->ExtractMaterial(Assets[mat->guid], Fixups.MaterialPath, IncludeMaterials, true);
-			}
+			//RpakStream->SetPosition(StudioOffset);
+			//
+			//s3studiohdr_t hdr = Reader.Read<s3studiohdr_t>();
+			//
+			//for (int i = 0; i < hdr.numtextures; i++)
+			//{
+			//	mstudiotexturev54_t* mat = reinterpret_cast<mstudiotexturev54_t*>(studioBuf.get() + hdr.textureindex + (i * sizeof(mstudiotexturev54_t)));
+			//
+			//	//if(Assets.ContainsKey(mat->guid))
+			//	//	this->ExtractMaterial(Assets[mat->guid], Fixups.MaterialPath, IncludeMaterials, true);
+			//}
 		}
 		else if (Asset.AssetVersion >= 12)
 		{
@@ -795,7 +845,7 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel(const RpakLoadAsset& Asset,
 			if (dataSize < 32)
 			{
 				// here we go again
-				
+
 				StarpakStream->SetPosition(Offset);
 				auto vg = StarpakReader.Read<RMdlVGHeader>();
 
@@ -842,12 +892,18 @@ std::unique_ptr<Assets::Model> RpakLib::ExtractModel(const RpakLoadAsset& Asset,
 	// accept v9-v12.0 (v8 is vtx/vvd/vvc, v12.1+ is new VG)
 	bool useOldVg = (mdlHdr.version().major > 8 && mdlHdr.version().major < 12) || (mdlHdr.version().major == 12 && mdlHdr.version().minor == 0);
 
-	if(useOldVg)
-		this->ExtractModelLodOld(StarpakReader, RpakStream, ModelName, Offset, Model, Fixups, Asset.AssetVersion, IncludeMaterials);
+	bool bExportAllMaterials = ExportManager::Config.GetBool("ModelMatExport") ? IncludeMaterials : false;
+
+	if (useOldVg)
+		this->ExtractModelLodOld(StarpakReader, RpakStream, ModelName, Offset, Model, Fixups, Asset.AssetVersion, bExportAllMaterials);
 	else if (Asset.AssetVersion >= 14)
-		this->ExtractModelLod_V14(StarpakReader, RpakStream, ModelName, Offset, Model, Fixups, Asset.AssetVersion, IncludeMaterials);
+		this->ExtractModelLod_V14(StarpakReader, RpakStream, ModelName, Offset, Model, Fixups, Asset.AssetVersion, bExportAllMaterials);
 	else // v12.1-v13
-		this->ExtractModelLod(StarpakReader, RpakStream, ModelName, Offset, Model, Fixups, Asset.AssetVersion, IncludeMaterials);
+		this->ExtractModelLod(StarpakReader, RpakStream, ModelName, Offset, Model, Fixups, Asset.AssetVersion, bExportAllMaterials);
+
+	// write QC file when exporting as SMD
+	if (Path != "" && AnimPath != "" && ModelFormat == ModelExportFormat_t::SMD)
+		this->ExportQC(Asset, BaseFileName + ".qc", RawModelName, Model, studioBuf.get(), nullptr);
 
 	return std::move(Model);
 }
@@ -861,6 +917,9 @@ void RpakLib::ExtractModelLod_V16(IO::BinaryReader& Reader, const std::unique_pt
 		g_Logger.Warning("!!! - Failed to extract Model LOD for %s. BaseStream was NULL (you probably don't have the required starpak)\n", Name.ToCString());
 		return;
 	}
+
+	auto ModelFormat = (ModelExportFormat_t)ExportManager::Config.Get<System::SettingType::Integer>("ModelFormat");
+
 	VGHeader_t_v16 vg = Reader.Read<VGHeader_t_v16>();
 
 	if (!vg.nummeshes)
@@ -888,7 +947,7 @@ void RpakLib::ExtractModelLod_V16(IO::BinaryReader& Reader, const std::unique_pt
 		BaseStream->SetPosition(meshOffset + (s * sizeof(VGMesh_t_v16)) + offsetof(VGMesh_t_v16, indexOffset) + mesh.indexOffset);
 		Reader.Read((uint8_t*)&IndexBuffer[0], 0, mesh.indexPacked.Count * sizeof(uint16_t));
 
-		List<vvw::mstudioboneweightextra_t> ExtendedWeights(mesh.weightsCount / sizeof(vvw::mstudioboneweightextra_t), true);
+		List<RMdlExtendedWeight> ExtendedWeights(mesh.weightsCount / sizeof(RMdlExtendedWeight), true);
 		BaseStream->SetPosition(meshOffset + (s * sizeof(VGMesh_t_v16)) + offsetof(VGMesh_t_v16, weightsOffset) + mesh.weightsOffset);
 		Reader.Read((uint8_t*)&ExtendedWeights[0], 0, mesh.weightsCount);
 
@@ -972,10 +1031,10 @@ void RpakLib::ExtractModelLod_V16(IO::BinaryReader& Reader, const std::unique_pt
 						ExtendedIndexShift = ExtendedWeightsIndex + ExtendedCounter;
 						ExtendedIndexShift = ExtendedIndexShift + -1;
 
-						vvw::mstudioboneweightextra_t& ExtendedWeight = ExtendedWeights[ExtendedIndexShift];
+						RMdlExtendedWeight& ExtendedWeight = ExtendedWeights[ExtendedIndexShift];
 
-						float ExtendedValue = (float)(ExtendedWeight.weight + 1) / (float)0x8000;
-						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.bone];
+						float ExtendedValue = (float)(ExtendedWeight.Weight + 1) / (float)0x8000;
+						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.BoneId];
 
 						Vertex.SetWeight({ ExtendedIndex, ExtendedValue }, WeightsIndex++);
 
@@ -1019,7 +1078,7 @@ void RpakLib::ExtractModelLod_V16(IO::BinaryReader& Reader, const std::unique_pt
 		{
 			NewMesh.MaterialIndices.EmplaceBack(rmdlMesh.material);
 			if (IncludeMaterials)
-				this->ExtractMaterial(Assets[Material.guid], Fixup.MaterialPath, IncludeMaterials, false);
+				this->ExtractMaterial(Assets[Material.guid], Fixup.MaterialPath, IncludeMaterials, false, true);
 		}
 		else
 			NewMesh.MaterialIndices.EmplaceBack(-1);
@@ -1041,6 +1100,8 @@ void RpakLib::ExtractModelLod_V14(IO::BinaryReader& Reader, const std::unique_pt
 		g_Logger.Warning("!!! - Failed to extract Model LOD for %s. BaseStream was NULL (you probably don't have the required starpak)\n", Name.ToCString());
 		return;
 	}
+
+	auto ModelFormat = (ModelExportFormat_t)ExportManager::Config.Get<System::SettingType::Integer>("ModelFormat");
 
 	BaseStream->SetPosition(Offset);
 
@@ -1077,17 +1138,17 @@ void RpakLib::ExtractModelLod_V14(IO::BinaryReader& Reader, const std::unique_pt
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh_V14)) + offsetof(RMdlVGMesh_V14, IndexOffset) + mesh.IndexOffset);
 		Reader.Read((uint8_t*)&IndexBuffer[0], 0, mesh.IndexPacked.Count * sizeof(uint16_t));
 
-		List<vvw::mstudioboneweightextra_t> ExtendedWeights(mesh.ExtendedWeightsCount / sizeof(vvw::mstudioboneweightextra_t), true);
+		List<RMdlExtendedWeight> ExtendedWeights(mesh.ExtendedWeightsCount / sizeof(RMdlExtendedWeight), true);
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh_V14)) + offsetof(RMdlVGMesh_V14, ExtendedWeightsOffset) + mesh.ExtendedWeightsOffset);
 		Reader.Read((uint8_t*)&ExtendedWeights[0], 0, mesh.ExtendedWeightsCount);
 
-		List<vvd::mstudioboneweight_t> ExternalWeightsBuffer(mesh.ExternalWeightsCount, true);
+		List<RMdlVGExternalWeights> ExternalWeightsBuffer(mesh.ExternalWeightsCount, true);
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh_V14)) + offsetof(RMdlVGMesh_V14, ExternalWeightsOffset) + mesh.ExternalWeightsOffset);
-		Reader.Read((uint8_t*)&ExternalWeightsBuffer[0], 0, mesh.ExternalWeightsCount * sizeof(vvd::mstudioboneweight_t));
+		Reader.Read((uint8_t*)&ExternalWeightsBuffer[0], 0, mesh.ExternalWeightsCount * sizeof(RMdlVGExternalWeights));
 
-		List<vtx::StripHeader_t> StripBuffer(mesh.StripsCount, true);
+		List<RMdlVGStrip> StripBuffer(mesh.StripsCount, true);
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh_V14)) + offsetof(RMdlVGMesh_V14, StripsOffset) + mesh.StripsOffset);
-		Reader.Read((uint8_t*)&StripBuffer[0], 0, mesh.StripsCount * sizeof(vtx::StripHeader_t));
+		Reader.Read((uint8_t*)&StripBuffer[0], 0, mesh.StripsCount * sizeof(RMdlVGStrip));
 
 		// Ignore a mesh that has no strips, otherwise there is no mesh data.
 		// This is likely also determined by flags == 0x0, but this is a good check.
@@ -1099,7 +1160,7 @@ void RpakLib::ExtractModelLod_V14(IO::BinaryReader& Reader, const std::unique_pt
 		List<uint8_t>& BoneRemapBuffer = *Fixup.BoneRemaps;
 
 		Assets::Mesh& NewMesh = Model->Meshes.Emplace(0x10, (((mesh.Flags2 & 0x2) == 0x2) ? 2 : 1));	// max weights / max uvs
-		vtx::StripHeader_t& Strip = StripBuffer[0];
+		RMdlVGStrip& Strip = StripBuffer[0];
 
 		uint8_t* VertexBufferPtr = (uint8_t*)&VertexBuffer[0];
 		uint16_t* FaceBufferPtr = (uint16_t*)&IndexBuffer[0];
@@ -1183,10 +1244,10 @@ void RpakLib::ExtractModelLod_V14(IO::BinaryReader& Reader, const std::unique_pt
 						ExtendedIndexShift = ExtendedWeightsIndex + ExtendedCounter;
 						ExtendedIndexShift = ExtendedIndexShift + -1;
 
-						vvw::mstudioboneweightextra_t& ExtendedWeight = ExtendedWeights[ExtendedIndexShift];
+						RMdlExtendedWeight& ExtendedWeight = ExtendedWeights[ExtendedIndexShift];
 
-						float ExtendedValue = (float)(ExtendedWeight.weight + 1) / (float)0x8000;
-						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.bone];
+						float ExtendedValue = (float)(ExtendedWeight.Weight + 1) / (float)0x8000;
+						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.BoneId];
 
 						Vertex.SetWeight({ ExtendedIndex, ExtendedValue }, WeightsIndex++);
 
@@ -1209,22 +1270,22 @@ void RpakLib::ExtractModelLod_V14(IO::BinaryReader& Reader, const std::unique_pt
 						// These models have 3 or less weights
 						//
 
-						if (ExternalWeights.numbones == 0x1)
+						if (ExternalWeights.NumWeights == 0x1)
 						{
 							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], 1.0f }, 0);
 						}
-						else if (ExternalWeights.numbones == 0x2)
+						else if (ExternalWeights.NumWeights == 0x2)
 						{
 							float CurrentWeightTotal = (float)(Weights.BlendWeights[0] + 1) / (float)0x8000;
 
 							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], CurrentWeightTotal }, 0);
 							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], 1.0f - CurrentWeightTotal }, 1);
 						}
-						else if (ExternalWeights.numbones == 0x3)
+						else if (ExternalWeights.NumWeights == 0x3)
 						{
-							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], ExternalWeights.weight[0] }, 0);
-							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], ExternalWeights.weight[1] }, 1);
-							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[2]], ExternalWeights.weight[2] }, 2);
+							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], ExternalWeights.SimpleWeights[0] }, 0);
+							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], ExternalWeights.SimpleWeights[1] }, 1);
+							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[2]], ExternalWeights.SimpleWeights[2] }, 2);
 						}
 					}
 					else if (externalWeightsBufferCount == 0) // simple 'else' could be enough?
@@ -1264,7 +1325,7 @@ void RpakLib::ExtractModelLod_V14(IO::BinaryReader& Reader, const std::unique_pt
 			RpakLoadAsset& MaterialAsset = Assets[Material.guid];
 
 			RMdlMaterial ParsedMaterial = this->ExtractMaterial(MaterialAsset, Fixup.MaterialPath, IncludeMaterials, false);
-			uint32_t MaterialIndex = Model->AddMaterial(ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
+			uint32_t MaterialIndex = Model->AddMaterial(ModelFormat == ModelExportFormat_t::SMD ? ParsedMaterial.FullMaterialName : ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
 
 			Assets::Material& MaterialInstance = Model->Materials[MaterialIndex];
 
@@ -1308,6 +1369,8 @@ void RpakLib::ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO
 		return;
 	}
 
+	auto ModelFormat = (ModelExportFormat_t)ExportManager::Config.Get<System::SettingType::Integer>("ModelFormat");
+
 	BaseStream->SetPosition(Offset);
 
 	RMdlVGHeader vg = Reader.Read<RMdlVGHeader>();
@@ -1343,17 +1406,17 @@ void RpakLib::ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh)) + offsetof(RMdlVGMesh, IndexOffset) + mesh.IndexOffset);
 		Reader.Read((uint8_t*)&IndexBuffer[0], 0, mesh.IndexPacked.Count * sizeof(uint16_t));
 
-		List<vvw::mstudioboneweightextra_t> ExtendedWeights(mesh.ExtendedWeightsCount / sizeof(vvw::mstudioboneweightextra_t), true);
+		List<RMdlExtendedWeight> ExtendedWeights(mesh.ExtendedWeightsCount / sizeof(RMdlExtendedWeight), true);
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh)) + offsetof(RMdlVGMesh, ExtendedWeightsOffset) + mesh.ExtendedWeightsOffset);
 		Reader.Read((uint8_t*)&ExtendedWeights[0], 0, mesh.ExtendedWeightsCount);
 
-		List<vvd::mstudioboneweight_t> ExternalWeightsBuffer(mesh.ExternalWeightsCount, true);
+		List<RMdlVGExternalWeights> ExternalWeightsBuffer(mesh.ExternalWeightsCount, true);
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh)) + offsetof(RMdlVGMesh, ExternalWeightsOffset) + mesh.ExternalWeightsOffset);
-		Reader.Read((uint8_t*)&ExternalWeightsBuffer[0], 0, mesh.ExternalWeightsCount * sizeof(vvd::mstudioboneweight_t));
+		Reader.Read((uint8_t*)&ExternalWeightsBuffer[0], 0, mesh.ExternalWeightsCount * sizeof(RMdlVGExternalWeights));
 
-		List<vtx::StripHeader_t> StripBuffer(mesh.StripsCount, true);
+		List<RMdlVGStrip> StripBuffer(mesh.StripsCount, true);
 		BaseStream->SetPosition(meshOffset + (s * sizeof(RMdlVGMesh)) + offsetof(RMdlVGMesh, StripsOffset) + mesh.StripsOffset);
-		Reader.Read((uint8_t*)&StripBuffer[0], 0, mesh.StripsCount * sizeof(vtx::StripHeader_t));
+		Reader.Read((uint8_t*)&StripBuffer[0], 0, mesh.StripsCount * sizeof(RMdlVGStrip));
 
 		// Ignore a mesh that has no strips, otherwise there is no mesh.
 		// This is likely also determined by flags == 0x0, but this is a good check.
@@ -1365,7 +1428,7 @@ void RpakLib::ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO
 		List<uint8_t>& BoneRemapBuffer = *Fixup.BoneRemaps;
 
 		Assets::Mesh& NewMesh = Model->Meshes.Emplace(0x10, (((mesh.Flags2 & 0x2) == 0x2) ? 2 : 1));	// max weights / max uvs
-		vtx::StripHeader_t& Strip = StripBuffer[0];
+		RMdlVGStrip& Strip = StripBuffer[0];
 
 		uint8_t* VertexBufferPtr = (uint8_t*)&VertexBuffer[0];
 		uint16_t* FaceBufferPtr = (uint16_t*)&IndexBuffer[0];
@@ -1449,10 +1512,10 @@ void RpakLib::ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO
 						ExtendedIndexShift = ExtendedWeightsIndex + ExtendedCounter;
 						ExtendedIndexShift = ExtendedIndexShift + -1;
 
-						vvw::mstudioboneweightextra_t& ExtendedWeight = ExtendedWeights[ExtendedIndexShift];
+						RMdlExtendedWeight& ExtendedWeight = ExtendedWeights[ExtendedIndexShift];
 
-						float ExtendedValue = (float)(ExtendedWeight.weight + 1) / (float)0x8000;
-						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.bone];
+						float ExtendedValue = (float)(ExtendedWeight.Weight + 1) / (float)0x8000;
+						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.BoneId];
 
 						Vertex.SetWeight({ ExtendedIndex, ExtendedValue }, WeightsIndex++);
 
@@ -1471,22 +1534,22 @@ void RpakLib::ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO
 					// These models have 3 or less weights
 					//
 
-					if (ExternalWeights.numbones == 0x1)
+					if (ExternalWeights.NumWeights == 0x1)
 					{
 						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], 1.0f }, 0);
 					}
-					else if (ExternalWeights.numbones == 0x2)
+					else if (ExternalWeights.NumWeights == 0x2)
 					{
 						float CurrentWeightTotal = (float)(Weights.BlendWeights[0] + 1) / (float)0x8000;
 
 						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], CurrentWeightTotal }, 0);
 						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], 1.0f - CurrentWeightTotal }, 1);
 					}
-					else if (ExternalWeights.numbones == 0x3)
+					else if (ExternalWeights.NumWeights == 0x3)
 					{
-						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], ExternalWeights.weight[0] }, 0);
-						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], ExternalWeights.weight[1] }, 1);
-						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[2]], ExternalWeights.weight[2] }, 2);
+						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], ExternalWeights.SimpleWeights[0] }, 0);
+						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], ExternalWeights.SimpleWeights[1] }, 1);
+						Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[2]], ExternalWeights.SimpleWeights[2] }, 2);
 					}
 				}
 			}
@@ -1499,7 +1562,7 @@ void RpakLib::ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO
 			VertexBufferPtr += mesh.VertexBufferStride;
 		}
 
-		for (uint32_t f = 0; f < (Strip.numIndices / 3); f++)
+		for (uint32_t f = 0; f < (Strip.IndexCount / 3); f++)
 		{
 			uint16_t i1 = *(uint16_t*)FaceBufferPtr;
 			uint16_t i2 = *(uint16_t*)(FaceBufferPtr + 1);
@@ -1521,7 +1584,7 @@ void RpakLib::ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO
 			RpakLoadAsset& MaterialAsset = Assets[Material.guid];
 
 			RMdlMaterial ParsedMaterial = this->ExtractMaterial(MaterialAsset, Fixup.MaterialPath, IncludeMaterials, false);
-			uint32_t MaterialIndex = Model->AddMaterial(ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
+			uint32_t MaterialIndex = Model->AddMaterial(ModelFormat == ModelExportFormat_t::SMD ? ParsedMaterial.FullMaterialName : ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
 
 			Assets::Material& MaterialInstance = Model->Materials[MaterialIndex];
 
@@ -1565,6 +1628,8 @@ void RpakLib::ExtractModelLodOld(IO::BinaryReader& Reader, const std::unique_ptr
 		return;
 	}
 
+	auto ModelFormat = (ModelExportFormat_t)ExportManager::Config.Get<System::SettingType::Integer>("ModelFormat");
+
 	BaseStream->SetPosition(Offset);
 
 	auto VGHeader = Reader.Read<RMdlVGHeaderOld>();
@@ -1585,37 +1650,42 @@ void RpakLib::ExtractModelLodOld(IO::BinaryReader& Reader, const std::unique_ptr
 	BaseStream->SetPosition(Offset + VGHeader.IndexOffset);
 	Reader.Read((uint8_t*)&IndexBuffer[0], 0, VGHeader.IndexCount * sizeof(uint16_t));
 
-	List<vvw::mstudioboneweightextra_t> ExtendedWeights(VGHeader.ExtendedWeightsCount / sizeof(vvw::mstudioboneweightextra_t), true);
+	List<RMdlExtendedWeight> ExtendedWeights(VGHeader.ExtendedWeightsCount / sizeof(RMdlExtendedWeight), true);
 	BaseStream->SetPosition(Offset + VGHeader.ExtendedWeightsOffset);
 	Reader.Read((uint8_t*)&ExtendedWeights[0], 0, VGHeader.ExtendedWeightsCount);
 
-	List<vvd::mstudioboneweight_t> ExternalWeightsBuffer(VGHeader.ExternalWeightsCount, true);
+	List<RMdlVGExternalWeights> ExternalWeightsBuffer(VGHeader.ExternalWeightsCount, true);
 	BaseStream->SetPosition(Offset + VGHeader.ExternalWeightsOffset);
-	Reader.Read((uint8_t*)&ExternalWeightsBuffer[0], 0, VGHeader.ExternalWeightsCount * sizeof(vvd::mstudioboneweight_t));
+	Reader.Read((uint8_t*)&ExternalWeightsBuffer[0], 0, VGHeader.ExternalWeightsCount * sizeof(RMdlVGExternalWeights));
 
-	List<vtx::StripHeader_t> StripBuffer(VGHeader.StripsCount, true);
+	List<RMdlVGStrip> StripBuffer(VGHeader.StripsCount, true);
 	BaseStream->SetPosition(Offset + VGHeader.StripsOffset);
-	Reader.Read((uint8_t*)&StripBuffer[0], 0, VGHeader.StripsCount * sizeof(vtx::StripHeader_t));
+	Reader.Read((uint8_t*)&StripBuffer[0], 0, VGHeader.StripsCount * sizeof(RMdlVGStrip));
 
-	List<vg::ModelLODHeader_t> lods(VGHeader.LodCount, true);
+	List<RMdlVGLod> LodBuffer(VGHeader.LodCount, true);
 	BaseStream->SetPosition(Offset + VGHeader.LodOffset);
-	Reader.Read((uint8_t*)&lods[0], 0, VGHeader.LodCount * sizeof(vg::ModelLODHeader_t));
+	Reader.Read((uint8_t*)&LodBuffer[0], 0, VGHeader.LodCount * sizeof(RMdlVGLod));
 
 	if (VGHeader.LodCount == 0)
 		return;
 
-	if (lods[0].numMeshes == 0)
+	size_t LodSubmeshCount = LodBuffer[0].MeshCount;
+	size_t LodSubmeshStart = LodBuffer[0].MeshIndex;
+
+	if (LodSubmeshCount == 0)
 		return;
 
 	// Loop and read submeshes
-	for (uint32_t s = lods[0].meshIndex; s < lods[0].numMeshes; s++)
+	for (uint32_t s = LodSubmeshStart; s < LodSubmeshCount; s++)
 	{
-		RMdlVGMeshOld& Submesh = SubmeshBuffer[s];
+		auto& Submesh = SubmeshBuffer[s];
 
 		// Ignore a submesh that has no strips, otherwise there is no mesh.
 		// This is likely also determined by flags == 0x0, but this is a good check.
 		if (Submesh.StripsCount == 0)
+		{
 			continue;
+		}
 
 		auto& BoneRemapBuffer = *Fixup.BoneRemaps;
 
@@ -1676,7 +1746,6 @@ void RpakLib::ExtractModelLodOld(IO::BinaryReader& Reader, const std::unique_ptr
 
 			if ((Submesh.Flags1 & 0x5000) == 0x5000)
 			{
-
 				if (ExtendedWeights.Count() > 0)
 				{
 					//
@@ -1705,8 +1774,8 @@ void RpakLib::ExtractModelLodOld(IO::BinaryReader& Reader, const std::unique_ptr
 
 						auto& ExtendedWeight = ExtendedWeights[ExtendedIndexShift];
 
-						float ExtendedValue = (float)(ExtendedWeight.weight + 1) / (float)0x8000;
-						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.bone];
+						float ExtendedValue = (float)(ExtendedWeight.Weight + 1) / (float)0x8000;
+						uint32_t ExtendedIndex = BoneRemapBuffer[ExtendedWeight.BoneId];
 
 						Vertex.SetWeight({ ExtendedIndex, ExtendedValue }, WeightsIndex++);
 
@@ -1729,24 +1798,23 @@ void RpakLib::ExtractModelLodOld(IO::BinaryReader& Reader, const std::unique_ptr
 					{
 						auto& ExternalWeights = ExternalWeightsBuffer[v];
 
-						if (ExternalWeights.numbones == 0x1)
+						if (ExternalWeights.NumWeights == 0x1)
 						{
 							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], 1.0f }, 0);
 						}
-						else if (ExternalWeights.numbones == 0x2)
+						else if (ExternalWeights.NumWeights == 0x2)
 						{
 							float CurrentWeightTotal = (float)(Weights.BlendWeights[0] + 1) / (float)0x8000;
 
 							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], CurrentWeightTotal }, 0);
 							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], 1.0f - CurrentWeightTotal }, 1);
 						}
-						else if (ExternalWeights.numbones == 0x3)
+						else if (ExternalWeights.NumWeights == 0x3)
 						{
-							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], ExternalWeights.weight[0] }, 0);
-							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], ExternalWeights.weight[1] }, 1);
-							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[2]], ExternalWeights.weight[2] }, 2);
+							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[0]], ExternalWeights.SimpleWeights[0] }, 0);
+							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[1]], ExternalWeights.SimpleWeights[1] }, 1);
+							Vertex.SetWeight({ BoneRemapBuffer[Weights.BlendIds[2]], ExternalWeights.SimpleWeights[2] }, 2);
 						}
-
 					}
 				}
 			}
@@ -1759,7 +1827,7 @@ void RpakLib::ExtractModelLodOld(IO::BinaryReader& Reader, const std::unique_ptr
 			VertexBufferPtr += Submesh.VertexBufferStride;
 		}
 
-		for (uint32_t f = 0; f < (Strip.numIndices / 3); f++)
+		for (uint32_t f = 0; f < (Strip.IndexCount / 3); f++)
 		{
 			auto i1 = *(uint16_t*)FaceBufferPtr;
 			auto i2 = *(uint16_t*)(FaceBufferPtr + 1);
@@ -1781,7 +1849,7 @@ void RpakLib::ExtractModelLodOld(IO::BinaryReader& Reader, const std::unique_ptr
 			auto& MaterialAsset = Assets[Material.guid];
 
 			auto ParsedMaterial = this->ExtractMaterial(MaterialAsset, Fixup.MaterialPath, IncludeMaterials, false);
-			auto MaterialIndex = Model->AddMaterial(ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
+			auto MaterialIndex = Model->AddMaterial(ModelFormat == ModelExportFormat_t::SMD ? ParsedMaterial.FullMaterialName : ParsedMaterial.MaterialName, ParsedMaterial.AlbedoHash);
 
 			auto& MaterialInstance = Model->Materials[MaterialIndex];
 
@@ -1858,7 +1926,7 @@ List<Assets::Bone> RpakLib::ExtractSkeleton_V16(IO::BinaryReader& Reader, uint64
 	for (uint32_t i = 0; i < studiohdr.numbones; i++)
 	{
 		uint64_t Position = baseOffset + studiohdr.boneindex + (i * (sizeof(mstudiobone_t_v16)));
-		
+
 		RpakStream->SetPosition(Position);
 		mstudiobone_t_v16 bone = Reader.Read<mstudiobone_t_v16>();
 

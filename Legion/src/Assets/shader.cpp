@@ -3,8 +3,6 @@
 #include "Path.h"
 #include "Directory.h"
 
-#include <assets/shader.h>
-
 void RpakLib::BuildShaderSetInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 {
 	auto RpakStream = this->GetFileStream(Asset);
@@ -15,17 +13,19 @@ void RpakLib::BuildShaderSetInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 
 	string Name = string::Format("shaderset_0x%llx", Asset.NameHash);
 
-	if (ShdsHeader.NameIndex || ShdsHeader.NameOffset)
+	if (ShdsHeader.pName.Index || ShdsHeader.pName.Offset)
 	{
-		RpakStream->SetPosition(this->GetFileOffset(Asset, ShdsHeader.NameIndex, ShdsHeader.NameOffset));
+		RpakStream->SetPosition(this->GetFileOffset(Asset, ShdsHeader.pName.Index, ShdsHeader.pName.Offset));
 
-		Name = Reader.ReadCString();
+		Name = string::Format("%s 0x%llx ", Reader.ReadCString().ToCString(), Asset.NameHash);
 	}
 
 	Info.Name = Name;
 	Info.Type = ApexAssetType::ShaderSet;
 	Info.Status = ApexAssetStatus::Loaded;
-	Info.Info = "N/A";
+
+	Info.Info = string::Format("Textures : %d", ShdsHeader.TextureInputCount);
+	Info.DebugInfo = string::Format("Samplers: %d", ShdsHeader.NumSamplers);
 }
 
 void RpakLib::ExportShaderSet(const RpakLoadAsset& Asset, const string& Path)
@@ -39,9 +39,9 @@ void RpakLib::ExportShaderSet(const RpakLoadAsset& Asset, const string& Path)
 
 	ShaderSetHeader Header = Reader.Read<ShaderSetHeader>();
 
-	if (Header.NameIndex || Header.NameOffset)
+	if (Header.pName.Index || Header.pName.Offset)
 	{
-		RpakStream->SetPosition(this->GetFileOffset(Asset, Header.NameIndex, Header.NameOffset));
+		RpakStream->SetPosition(this->GetFileOffset(Asset, Header.pName.Index , Header.pName.Offset));
 
 		ShaderSetPath = IO::Path::Combine(Path, Reader.ReadCString());
 	}
@@ -213,12 +213,12 @@ List<ShaderVar> RpakLib::ExtractShaderVars(const RpakLoadAsset& Asset, const std
 	return Vars;
 }
 
-Dictionary<uint32_t, ShaderResBinding> RpakLib::ExtractShaderResourceBindings(const RpakLoadAsset& Asset, D3D_SHADER_INPUT_TYPE InputType)
+List<ShaderResBinding> RpakLib::ExtractShaderResourceBindings(const RpakLoadAsset& Asset, D3D_SHADER_INPUT_TYPE InputType)
 {
 	auto RpakStream = this->GetFileStream(Asset);
 	IO::BinaryReader Reader = IO::BinaryReader(RpakStream.get(), true);
 
-	Dictionary<uint32_t, ShaderResBinding> ResBindings;
+	List<ShaderResBinding> ResBindings;
 
 	if (Asset.RawDataIndex >= (this->LoadedFiles[Asset.FileIndex].SegmentBlocks.Count() + this->LoadedFiles[Asset.FileIndex].StartSegmentIndex))
 		return ResBindings;
@@ -271,12 +271,10 @@ Dictionary<uint32_t, ShaderResBinding> RpakLib::ExtractShaderResourceBindings(co
 				ShaderResBinding Res;
 				Res.Name = Name;
 				Res.Type = ResBinding.InputType;
-				Res.BindPoint = ResBinding.BindPoint;
-				Res.BindCount = ResBinding.BindCount;
 
 				if (Res.Type == InputType)
 				{
-					ResBindings.Add(Res.BindPoint, Res);
+					ResBindings.EmplaceBack(Res);
 				}
 			}
 			break;

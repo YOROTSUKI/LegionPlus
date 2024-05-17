@@ -79,7 +79,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(SolutionDir)Legion\src;$(SolutionDir)cppnet\cppkore;$(IncludePath);$(ProjectDir)</IncludePath>
+    <IncludePath>$(SolutionDir)cppnet\cppkore;$(IncludePath);$(ProjectDir)</IncludePath>
     <LibraryPath>$(SolutionDir)bin\x64\Debug;$(SolutionDir)cppnet\cppkore_libs;$(LibraryPath)</LibraryPath>
     <IntDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
@@ -87,7 +87,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir)Legion\src;$(SolutionDir)cppnet\cppkore;$(ProjectDir);$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)cppnet\cppkore;$(ProjectDir);$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)bin\x64\Release;$(SolutionDir)cppnet\cppkore_libs;$(LibraryPath)</LibraryPath>
     <IntDir>$(SolutionDir)build\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
@@ -169,13 +169,13 @@
     <ClCompile Include="src\Assets\rmap.cpp" />
     <ClCompile Include="src\assets\rson.cpp" />
     <ClCompile Include="src\Assets\rui.cpp" />
+    <ClCompile Include="src\Assets\wraps.cpp" />
     <ClCompile Include="src\assets\settings.cpp" />
     <ClCompile Include="src\Assets\shader.cpp" />
     <ClCompile Include="src\Assets\subtitles.cpp" />
     <ClCompile Include="src\Assets\texture.cpp" />
     <ClCompile Include="src\Assets\uiia.cpp" />
     <ClCompile Include="src\Assets\uimg.cpp" />
-    <ClCompile Include="src\Assets\wrap.cpp" />
     <ClCompile Include="src\bsplib\games\bsp_apexlegends.cpp" />
     <ClCompile Include="src\bsplib\games\bsp_titanfall2.cpp" />
     <ClCompile Include="src\CommandLine.cpp" />
@@ -227,8 +227,6 @@
     <ClInclude Include="RpakLib.h" />
     <ClInclude Include="rtech.h" />
     <ClInclude Include="MdlLib.h" />
-    <ClInclude Include="src\Assets\shader.h" />
-    <ClInclude Include="src\assets\texture.h" />
     <ClInclude Include="Utils.h" />
     <ClInclude Include="version.h" />
     <ClInclude Include="VpkLib.h" />

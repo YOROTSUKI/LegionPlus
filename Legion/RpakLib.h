@@ -16,8 +16,6 @@
 #include "Exporter.h"
 #include "rmdlstructs.h"
 
-#include <assets/shader.h>
-
 #define MAX_LOADED_FILES 4096
 
 #pragma pack(push, 1)
@@ -28,19 +26,12 @@ struct RpakBaseHeader
 	uint16_t Flags;
 };
 
-enum class RpakCompressionType : uint8_t
-{
-	None = 0x0,
-	Respawn = 0x1,
-	Oodle = 0x2,
-};
-
 struct RpakApexHeader
 {
 	uint32_t Magic;
 	uint16_t Version;
 	uint8_t Flags;
-	RpakCompressionType CompressionType;
+	bool IsCompressed;
 	uint64_t CreatedFileTime;
 	uint64_t Hash;
 
@@ -189,8 +180,7 @@ struct RpakApexAssetEntry
 	uint32_t UsesCount;
 
 	uint32_t SubHeaderSize;
-	uint8_t Version;
-	char unk[3];
+	uint32_t Version;
 	uint32_t Magic;
 };
 
@@ -327,7 +317,7 @@ enum class AssetType_t : uint32_t
 	RUI = 'iu', // ui - 0x75690000
 	Map = 'pamr', // rmap - 0x70616D72
 	Effect = 'tcfe', // efct - 0x74636665
-	Wrap = 'parw', // wrap - 
+	Wrap = 'parw' //Wrap - 0x70617277
 };
 
 enum class ModelExportFormat_t
@@ -348,7 +338,8 @@ enum class AnimExportFormat_t
 {
 	SEAnim,
 	Cast,
-	RAnim
+	RAnim,
+	SMD
 };
 
 enum class MatCPUExportFormat_t
@@ -436,7 +427,7 @@ public:
 	bool m_bImageExporterInitialized = false;
 
 	// Builds the viewer list of assets
-	std::unique_ptr<List<ApexAsset>> BuildAssetList(const std::array<bool, 12>& arrAssets);
+	std::unique_ptr<List<ApexAsset>> BuildAssetList(const std::array<bool, 11>& arrAssets);
 	// Builds the preview model mesh
 	std::unique_ptr<Assets::Model> BuildPreviewModel(uint64_t Hash);
 	// Builds the preview texture
@@ -468,17 +459,17 @@ public:
 	void ExportSettings(const RpakLoadAsset& Asset, const string& Path);
 	void ExportSettingsLayout(const RpakLoadAsset& Asset, const string& Path);
 	void ExportRSON(const RpakLoadAsset& Asset, const string& Path);
-	void ExportQC(int assetVersion, const string& Path, const string& modelPath, char* rmdlBuf, char* phyBuf = nullptr);
+	void ExportQC(const RpakLoadAsset& asset, const string& Path, const string& modelPath, const std::unique_ptr<Assets::Model>& Model, char* rmdlBuf, char* phyBuf);
 	void ExportRUI(const RpakLoadAsset& Asset, const string& Path);
-	void ExportWrappedFile(const RpakLoadAsset& Asset, const string& Path);
+	void ExportWrap(const RpakLoadAsset& Asset, const string& Path);
 
 	List<List<DataTableColumnData>> ExtractDataTable(const RpakLoadAsset& Asset);
 	List<ShaderVar> ExtractShaderVars(const RpakLoadAsset& Asset, const std::string& CBufName = "", D3D_SHADER_VARIABLE_TYPE Type = D3D_SVT_FORCE_DWORD); // default value as a type that should never be used
-	Dictionary<uint32_t, ShaderResBinding> ExtractShaderResourceBindings(const RpakLoadAsset& Asset, D3D_SHADER_INPUT_TYPE InputType);
+	List<ShaderResBinding> ExtractShaderResourceBindings(const RpakLoadAsset& Asset, D3D_SHADER_INPUT_TYPE InputType);
 
 	// Used by the BSP system.
-	RMdlMaterial ExtractMaterial(const RpakLoadAsset& Asset, const string& Path, bool IncludeImages, bool IncludeImageNames);
-
+	RMdlMaterial ExtractMaterial(const RpakLoadAsset& Asset, const string& Path, bool IncludeImages, bool IncludeImageNames, bool silent = false);
+	void QCWriteAseqData(IO::StreamWriter& qc, const string& Path, uint64_t AnimHash, const RpakLoadAsset& RigAsset, List<string> PoseParameters, List<string>& AnimationNames, bool WriteAnimations);
 private:
 	std::array<RpakFile, MAX_LOADED_FILES> LoadedFiles;
 	uint32_t LoadedFileIndex;
@@ -525,7 +516,6 @@ private:
 
 	std::unique_ptr<Assets::Model> ExtractModel(const RpakLoadAsset& Asset, const string& Path, const string& AnimPath, bool IncludeMaterials, bool IncludeAnimations);
 	std::unique_ptr<Assets::Model> ExtractModel_V16(const RpakLoadAsset& Asset, const string& Path, const string& AnimPath, bool IncludeMaterials, bool IncludeAnimations);
-	std::unique_ptr<Assets::Model> ExtractModelInfo_V16(const RpakLoadAsset& Asset);
 	void ExtractModelLod(IO::BinaryReader& Reader, const std::unique_ptr<IO::MemoryStream>& RpakStream, string Name, uint64_t Offset, const std::unique_ptr<Assets::Model>& Model, RMdlFixupPatches& Fixup, uint32_t Version, bool IncludeMaterials);
 	void ExtractModelLod_V14(IO::BinaryReader& Reader, const std::unique_ptr<IO::MemoryStream>& RpakStream, string Name, uint64_t Offset, const std::unique_ptr<Assets::Model>& Model, RMdlFixupPatches& Fixup, uint32_t Version, bool IncludeMaterials);
 	void ExtractModelLod_V16(IO::BinaryReader& Reader, const std::unique_ptr<IO::MemoryStream>& RpakStream, string Name, uint64_t Offset, const std::unique_ptr<Assets::Model>& Model, RMdlFixupPatches& Fixup, uint32_t Version, bool IncludeMaterials);

@@ -82,7 +82,7 @@ void ExportTitanfall2Bsp(const std::unique_ptr<RpakLib>& RpakFileSystem, std::un
 	// make sure that RpakFileSystem actually exists (i.e. an rpak is loaded)
 	if (RpakFileSystem)
 	{
-		std::array<bool, 12> bAssets = {
+		std::array<bool, 11> bAssets = {
 			false, // Model
 			false, // Animation
 			false, // Animation Seq
@@ -94,7 +94,6 @@ void ExportTitanfall2Bsp(const std::unique_ptr<RpakLib>& RpakFileSystem, std::un
 			false, // SettingsSets
 			false, // RSONs
 			false, // Effects
-			false, // Wrapped Files
 		};
 
 		RpakMaterials = RpakFileSystem->BuildAssetList(bAssets);
@@ -247,7 +246,7 @@ void ExportTitanfall2Bsp(const std::unique_ptr<RpakLib>& RpakFileSystem, std::un
 	string ExportedModelsPath = IO::Path::Combine(ModelPath, "_models");
 	string ExportedModelAnimsPath = IO::Path::Combine(ExportedModelsPath, "_animations");
 
-	std::array<bool, 12> bAssets = {
+	std::array<bool, 11> bAssets = {
 		true,  // Model
 		false, // Animation
 		false, // AnimationSeq
@@ -259,7 +258,6 @@ void ExportTitanfall2Bsp(const std::unique_ptr<RpakLib>& RpakFileSystem, std::un
 		false, // SettingsSets
 		false, // RSONs
 		false, // Effects
-		false, // Wrapped Files
 	};
 
 	auto RpakModels = RpakFileSystem->BuildAssetList(bAssets);

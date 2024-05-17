@@ -2,7 +2,6 @@
 #include "RpakLib.h"
 #include "Path.h"
 #include "Directory.h"
-#include < io.h>
 
 void RpakLib::BuildDataTableInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 {
@@ -20,11 +19,6 @@ void RpakLib::BuildDataTableInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 
 void RpakLib::ExportDataTable(const RpakLoadAsset& Asset, const string& Path)
 {
-	if (_access(Path, 00) == -1)
-	{
-		IO::Directory::CreateDirectory(IO::Path::Combine(Path, ""));
-	}
-
 	TextExportFormat_t Format = (TextExportFormat_t)ExportManager::Config.Get<System::SettingType::Integer>("TextFormat");
 
 	string sExtension = "";
@@ -59,7 +53,9 @@ void RpakLib::ExportDataTable(const RpakLoadAsset& Asset, const string& Path)
 			switch (cd.Type)
 			{
 			case DataTableColumnDataType::Bool:
-				dtbl_out << cd.bValue;
+				if (cd.bValue)
+					dtbl_out << "true";
+				else dtbl_out << "false";
 				break;
 			case DataTableColumnDataType::Int:
 				dtbl_out << cd.iValue;

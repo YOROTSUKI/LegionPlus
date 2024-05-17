@@ -153,7 +153,7 @@ void RpakLib::PatchAssets()
 }
 
 //std::unique_ptr<List<ApexAsset>> RpakLib::BuildAssetList(bool Models, bool Anims, bool Images, bool Materials, bool UIImages, bool DataTables)
-std::unique_ptr<List<ApexAsset>> RpakLib::BuildAssetList(const std::array<bool, 12> &arrAssets)
+std::unique_ptr<List<ApexAsset>> RpakLib::BuildAssetList(const std::array<bool, 11> &arrAssets)
 {
 	auto Result = std::make_unique<List<ApexAsset>>();
 
@@ -243,8 +243,6 @@ std::unique_ptr<List<ApexAsset>> RpakLib::BuildAssetList(const std::array<bool, 
 			BuildMapInfo(Asset, NewAsset);
 			break;
 		case (uint32_t)AssetType_t::Wrap:
-			if (!arrAssets[11])
-				continue;
 			BuildWrapInfo(Asset, NewAsset);
 			break;
 		default:
@@ -302,6 +300,9 @@ void RpakLib::InitializeAnimExporter(AnimExportFormat_t Format)
 	{
 	case AnimExportFormat_t::Cast:
 		AnimExporter = std::make_unique<Assets::Exporters::CastAsset>();
+		break;
+	case AnimExportFormat_t::SMD:
+		AnimExporter = std::make_unique<Assets::Exporters::ValveSMD>();
 		break;
 	default:
 		AnimExporter = std::make_unique<Assets::Exporters::SEAsset>();
@@ -504,7 +505,7 @@ void RpakLib::CalcBoneQuaternion(const mstudio_rle_anim_t& pAnim, uint16_t** Bon
 
 		Math::Vector3 BoneRotation = Anim->Bones[BoneIndex].LocalRotation().ToEulerAngles();
 
-		Vector3 EulerResult = { Math::MathHelper::DegreesToRadians(BoneRotation.X),Math::MathHelper::DegreesToRadians(BoneRotation.Y),Math::MathHelper::DegreesToRadians(BoneRotation.Z) };
+		float EulerResult[4]{ Math::MathHelper::DegreesToRadians(BoneRotation.X),Math::MathHelper::DegreesToRadians(BoneRotation.Y),Math::MathHelper::DegreesToRadians(BoneRotation.Z),0 };
 
 		uint8_t* dataPtrs[] = { (uint8_t*)pAnimValues,(uint8_t*)pAnimValues_Axis1,(uint8_t*)pAnimValues_Axis2 };
 
@@ -521,7 +522,7 @@ void RpakLib::CalcBoneQuaternion(const mstudio_rle_anim_t& pAnim, uint16_t** Bon
 
 		Math::Quaternion Result;
 
-		RTech::AngleQuaternion(EulerResult, Result);
+		RTech::DecompressConvertRotation((const __m128i*) & EulerResult[0], (float*)&Result);
 
 		Anim->GetNodeCurves(Anim->Bones[BoneIndex].Name())[0].Keyframes.Emplace(FrameIndex, Result);
 
@@ -839,7 +840,7 @@ bool RpakLib::ParseApexRpak(const string& RpakPath, std::unique_ptr<IO::MemorySt
 	string BasePath = IO::Path::GetDirectoryName(RpakPath);
 	string FileNameNoExt = IO::Path::GetFileNameWithoutExtension(RpakPath);
 
-		// Trim off the () if exists
+	// Trim off the () if exists
 	if (FileNameNoExt.Contains("("))
 		FileNameNoExt = FileNameNoExt.Substring(0, FileNameNoExt.IndexOf("("));
 
@@ -852,7 +853,7 @@ bool RpakLib::ParseApexRpak(const string& RpakPath, std::unique_ptr<IO::MemorySt
 
 		if (this->LoadedFilePaths.Contains(AdditionalRpakToLoad) || this->LoadFileQueue.Contains(AdditionalRpakToLoad))
 			continue;
-		
+
 		this->LoadFileQueue.EmplaceBack(AdditionalRpakToLoad);
 	}
 
@@ -1123,7 +1124,7 @@ bool RpakLib::MountApexRpak(const string& Path, bool Dump)
 	IO::BinaryReader Reader = IO::BinaryReader(IO::File::OpenRead(Path));
 	RpakApexHeader Header = Reader.Read<RpakApexHeader>();
 
-	if (Header.CompressionType == RpakCompressionType::None && Header.CompressedSize == Header.DecompressedSize)
+	if (!Header.IsCompressed && Header.CompressedSize == Header.DecompressedSize)
 	{
 		auto Stream = std::make_unique<IO::MemoryStream>();
 
@@ -1134,55 +1135,25 @@ bool RpakLib::MountApexRpak(const string& Path, bool Dump)
 		return ParseApexRpak(Path, Stream);
 	}
 
-	std::unique_ptr<IO::MemoryStream> ResultStream = nullptr;
+	auto CompressedBuffer = std::make_unique<uint8_t[]>(Header.CompressedSize);
 
-	switch (Header.CompressionType)
-	{
-	case RpakCompressionType::Respawn:
-	{
-		auto CompressedBuffer = std::make_unique<uint8_t[]>(Header.CompressedSize);
+	Reader.Read(CompressedBuffer.get() + sizeof(RpakApexHeader), 0, Header.CompressedSize - sizeof(RpakApexHeader));
 
-		Reader.Read(CompressedBuffer.get() + sizeof(RpakApexHeader), 0, Header.CompressedSize - sizeof(RpakApexHeader));
+	rpak_decomp_state state;
 
-		rpak_decomp_state state;
+	uint64_t dSize = RTech::DecompressPakfileInit(&state, CompressedBuffer.get(), Header.CompressedSize, 0, sizeof(RpakApexHeader));
 
-		uint64_t dSize = RTech::DecompressPakfileInit(&state, CompressedBuffer.get(), Header.CompressedSize, 0, sizeof(RpakApexHeader));
+	std::vector<std::uint8_t> pakbuf(dSize, 0);
 
-		auto pakbuf = new uint8_t[dSize];
+	state.out_mask = UINT64_MAX;
+	state.out = uint64_t(pakbuf.data());
 
-		state.out_mask = UINT64_MAX;
-		state.out = uint64_t(pakbuf);
-
-		uint8_t decomp_result = RTech::DecompressPakFile(&state, dSize, dSize);
-
-		ResultStream = std::move(std::make_unique<IO::MemoryStream>(pakbuf, 0, Header.DecompressedSize, true, false));
-		break;
-	}
-	case RpakCompressionType::Oodle:
-	{
-		auto CompressedBuffer = new uint8_t[Header.CompressedSize];
-		Reader.Read(CompressedBuffer, 0, Header.CompressedSize);
-
-		// there are 520 unk bytes at the end of the archive
-
-		ResultStream = RTech::DecompressStreamedBuffer(CompressedBuffer, Header.DecompressedSize, (uint8_t)CompressionType::OODLE, false, sizeof(RpakApexHeader));
-
-		if (!ResultStream) {  // ???
-			Header.DecompressedSize -= sizeof(RpakApexHeader);
-			ResultStream = RTech::DecompressStreamedBuffer(CompressedBuffer, Header.DecompressedSize, (uint8_t)CompressionType::OODLE, true, sizeof(RpakApexHeader));
-		}
-		break;
-	}
-	default:
-		g_Logger.Warning("Unknown compression type %d\n", Header.CompressionType);
-		return false;
-	}
+	std::uint8_t decomp_result = RTech::DecompressPakFile(&state, dSize, pakbuf.size());
 
 	Header.CompressedSize = Header.DecompressedSize;
-	Header.CompressionType = RpakCompressionType::None;
+	std::memcpy(pakbuf.data(), &Header, sizeof(RpakApexHeader));
 
-	ResultStream->Write((uint8_t*)&Header, 0, sizeof(RpakApexHeader), 0);
-	ResultStream->SetPosition(0);
+	auto ResultStream = std::make_unique<IO::MemoryStream>(pakbuf.data(), 0, Header.DecompressedSize, true, true, true);
 
 #if _DEBUG
 	if (Dump)
