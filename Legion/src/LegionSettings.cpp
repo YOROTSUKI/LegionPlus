@@ -58,7 +58,7 @@ void LegionSettings::InitializeComponent()
 	this->ExportBrowseButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Right);
 	this->groupBox1->AddControl(this->ExportBrowseButton);
 
-	// 
+	//
 	//	Toggle Settings Box
 	//
 	this->groupBox2 = new UIX::UIXGroupBox();
@@ -69,7 +69,7 @@ void LegionSettings::InitializeComponent()
 	this->groupBox2->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
 	this->AddControl(this->groupBox2);
 
-	// 
+	//
 	//	Toggle Settings
 	//
 	this->ToggleOverwriting = new UIX::UIXCheckBox();
@@ -104,13 +104,13 @@ void LegionSettings::InitializeComponent()
 	this->ToggleUseTxtrGuids->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
 	this->groupBox2->AddControl(this->ToggleUseTxtrGuids);
 
-	this->ToggleSkinExport = new UIX::UIXCheckBox();
-	this->ToggleSkinExport->SetSize({ 105, 18 });
-	this->ToggleSkinExport->SetLocation({ 130, 43 });
-	this->ToggleSkinExport->SetTabIndex(2);
-	this->ToggleSkinExport->SetText("Export Skins");
-	this->ToggleSkinExport->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
-	this->groupBox2->AddControl(this->ToggleSkinExport);
+	this->ToggleModelMatExport = new UIX::UIXCheckBox();
+	this->ToggleModelMatExport->SetSize({ 135, 18 });
+	this->ToggleModelMatExport->SetLocation({ 130, 43 });
+	this->ToggleModelMatExport->SetTabIndex(2);
+	this->ToggleModelMatExport->SetText("Export Model Materials");
+	this->ToggleModelMatExport->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
+	this->groupBox2->AddControl(this->ToggleModelMatExport);
 
 	//
 	//	About Box
@@ -166,7 +166,7 @@ void LegionSettings::InitializeComponent()
 	this->DiscordButton->SetText("Discord");
 	this->groupBox3->AddControl(this->DiscordButton);
 
-	// 
+	//
 	//	Load Settings Box
 	//
 	this->groupBox4 = new UIX::UIXGroupBox();
@@ -176,7 +176,6 @@ void LegionSettings::InitializeComponent()
 	this->groupBox4->SetText("Load Settings");
 	this->groupBox4->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
 	this->AddControl(this->groupBox4);
-
 
 	//	Load Models
 	this->LoadModels = new UIX::UIXCheckBox();
@@ -277,15 +276,6 @@ void LegionSettings::InitializeComponent()
 	this->LoadSettingsSets->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
 	this->groupBox4->AddControl(this->LoadSettingsSets);
 
-	//	Load SettingsSets
-	this->LoadWrappedFiles = new UIX::UIXCheckBox();
-	this->LoadWrappedFiles->SetSize({ 108, 18 });
-	this->LoadWrappedFiles->SetLocation({ 130, 135 });
-	this->LoadWrappedFiles->SetTabIndex(2);
-	this->LoadWrappedFiles->SetText("Load Wrapped Files");
-	this->LoadWrappedFiles->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
-	this->groupBox4->AddControl(this->LoadWrappedFiles);
-
 	//
 	//	Assets Export Settings Box
 	//
@@ -348,6 +338,7 @@ void LegionSettings::InitializeComponent()
 	this->AnimExportFormat->Items.Add("Cast");
 	this->AnimExportFormat->Items.Add("SEAnim");
 	this->AnimExportFormat->Items.Add("RAnim");
+	this->AnimExportFormat->Items.Add("SMD");
 	this->groupBox5->AddControl(this->AnimExportFormat);
 
 	//
@@ -459,8 +450,7 @@ void LegionSettings::InitializeComponent()
 	this->AudioLanguage->SetTabIndex(0);
 	this->AudioLanguage->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
 	this->AudioLanguage->SetDropDownStyle(Forms::ComboBoxStyle::DropDownList);
-	// UNKNOWN should always be after the last valid type
-	for (int i = (int)MilesLanguageID::English; i < (int)MilesLanguageID::UNKNOWN; i++) {
+	for (int i = (int)MilesLanguageID::English; i <= (int)MilesLanguageID::Korean; i++) {
 		this->AudioLanguage->Items.Add(imstring(LanguageName((MilesLanguageID)i)));
 	}
 	this->groupBox5->AddControl(this->AudioLanguage);
@@ -561,6 +551,9 @@ void LegionSettings::LoadSettings()
 	case AnimExportFormat_t::RAnim:
 		this->AnimExportFormat->SetSelectedIndex(2);
 		break;
+	case AnimExportFormat_t::SMD:
+		this->AnimExportFormat->SetSelectedIndex(3);
+		break;
 	}
 
 	switch (ImageFormat)
@@ -638,12 +631,11 @@ void LegionSettings::LoadSettings()
 	this->LoadSettingsSets->SetChecked(ExportManager::Config.GetBool("LoadSettingsSets"));
 	this->LoadEffects->SetChecked(ExportManager::Config.GetBool("LoadEffects"));
 	this->LoadRSONs->SetChecked(ExportManager::Config.GetBool("LoadRSONs"));
-	this->LoadWrappedFiles->SetChecked(ExportManager::Config.GetBool("LoadWrappedFiles"));
 	this->ToggleOverwriting->SetChecked(ExportManager::Config.GetBool("OverwriteExistingFiles"));
 	this->ToggleAudioLanguageFolders->SetChecked(ExportManager::Config.GetBool("AudioLanguageFolders"));
 	this->ToggleUseFullPaths->SetChecked(ExportManager::Config.GetBool("UseFullPaths"));
 	this->ToggleUseTxtrGuids->SetChecked(ExportManager::Config.GetBool("UseTxtrGuids"));
-	this->ToggleSkinExport->SetChecked(ExportManager::Config.GetBool("SkinExport"));
+	this->ToggleModelMatExport->SetChecked(ExportManager::Config.GetBool("ModelMatExport"));
 
 	if (ExportManager::Config.Has<System::SettingType::String>("ExportDirectory"))
 	{
@@ -713,6 +705,9 @@ void LegionSettings::OnClose(const std::unique_ptr<FormClosingEventArgs>& EventA
 			break;
 		case 2:
 			AnimExportFormat = AnimExportFormat_t::RAnim;
+			break;
+		case 3:
+			AnimExportFormat = AnimExportFormat_t::SMD;
 			break;
 		}
 	}
@@ -814,8 +809,6 @@ void LegionSettings::OnClose(const std::unique_ptr<FormClosingEventArgs>& EventA
 		bRefreshView = true;
 	if (ThisPtr->LoadRSONs->Checked() != ExportManager::Config.GetBool("LoadRSONs"))
 		bRefreshView = true;
-	if (ThisPtr->LoadWrappedFiles->Checked() != ExportManager::Config.GetBool("LoadWrappedFiles"))
-		bRefreshView = true;
 	if (ThisPtr->ToggleUseFullPaths->Checked() != ExportManager::Config.GetBool("UseFullPaths"))
 		bRefreshView = true;
 
@@ -830,12 +823,11 @@ void LegionSettings::OnClose(const std::unique_ptr<FormClosingEventArgs>& EventA
 	ExportManager::Config.SetBool("LoadSettingsSets", ThisPtr->LoadSettingsSets->Checked());
 	ExportManager::Config.SetBool("LoadEffects", ThisPtr->LoadEffects->Checked());
 	ExportManager::Config.SetBool("LoadRSONs", ThisPtr->LoadRSONs->Checked());
-	ExportManager::Config.SetBool("LoadRSONs", ThisPtr->LoadWrappedFiles->Checked());
 	ExportManager::Config.SetBool("OverwriteExistingFiles", ThisPtr->ToggleOverwriting->Checked());
 	ExportManager::Config.SetBool("AudioLanguageFolders", ThisPtr->ToggleAudioLanguageFolders->Checked());
 	ExportManager::Config.SetBool("UseFullPaths", ThisPtr->ToggleUseFullPaths->Checked());
 	ExportManager::Config.SetBool("UseTxtrGuids", ThisPtr->ToggleUseTxtrGuids->Checked());
-	ExportManager::Config.SetBool("SkinExport", ThisPtr->ToggleSkinExport->Checked());
+	ExportManager::Config.SetBool("ModelMatExport", ThisPtr->ToggleModelMatExport->Checked());
 	ExportManager::Config.SetInt("ModelFormat", (uint32_t)ModelExportFormat);
 	ExportManager::Config.SetInt("AnimFormat", (uint32_t)AnimExportFormat);
 	ExportManager::Config.SetInt("ImageFormat", (uint32_t)ImageExportFormat);
@@ -858,7 +850,7 @@ void LegionSettings::OnClose(const std::unique_ptr<FormClosingEventArgs>& EventA
 
 	ExportManager::SaveConfigToDisk();
 
-	if(bRefreshView)
+	if (bRefreshView)
 		g_pLegionMain->RefreshView();
 }
 
@@ -888,4 +880,3 @@ void LegionSettings::OnBrowseClick(Forms::Control* Sender)
 		ThisPtr->ExportBrowseFolder->SetText(Result);
 	}
 }
-

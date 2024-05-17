@@ -6,9 +6,6 @@
 #include <typeinfo>
 #include <typeindex>
 
-#include <assets/shader.h>
-#include <assets/texture.h>
-
 const char* s_MaterialTypes[] = {
 	"RGDU",
 	"RGDP",
@@ -47,14 +44,16 @@ void RpakLib::BuildMaterialInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 	else
 	{
 		MaterialHeaderV12 temp = Reader.Read<MaterialHeaderV12>();
-		hdr.FromV12(temp);
+
+		hdr.pName = temp.pName;
+		hdr.textureHandles = temp.textureHandles;
+		hdr.streamingTextureHandles = temp.streamingTextureHandles;
 	}
 
 	RpakStream->SetPosition(this->GetFileOffset(Asset, hdr.pName.Index, hdr.pName.Offset));
 
 	string MaterialName = Reader.ReadCString();
 
-	uint32_t textureSlotCount = (hdr.streamingTextureHandles.Offset - hdr.textureHandles.Offset) / 8;
 	if (ExportManager::Config.GetBool("UseFullPaths"))
 		Info.Name = MaterialName;
 	else
@@ -63,7 +62,9 @@ void RpakLib::BuildMaterialInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 	Info.Type = ApexAssetType::Material;
 	Info.Status = ApexAssetStatus::Loaded;
 
-	Info.Info = string::Format("Textures: %i", textureSlotCount);
+	uint32_t TexturesCount = (hdr.streamingTextureHandles.Offset - hdr.textureHandles.Offset) / 8;
+
+	Info.Info = string::Format("Textures: %i", TexturesCount);
 }
 
 void RpakLib::ExportMatCPUAsRaw(const RpakLoadAsset& Asset, MaterialHeader& MatHdr, MaterialCPUHeader& MatCPUHdr, std::ofstream& oStream)
@@ -90,7 +91,7 @@ void RpakLib::ExportMatCPUAsStruct(const RpakLoadAsset& Asset, MaterialHeader& M
 		RpakStream->SetPosition(this->GetFileOffset(Asset, Asset.SubHeaderIndex, Asset.SubHeaderOffset));
 		MaterialHeaderV12 mathdr = Reader.Read<MaterialHeaderV12>();
 
-		MatHdr.FromV12(mathdr);
+		MatHdr.shaderSetGuid = mathdr.shaderSetGuid;
 	}
 
 	if (!Assets.ContainsKey(MatHdr.shaderSetGuid)) // no shaderset loaded
@@ -250,7 +251,7 @@ void RpakLib::ExportMaterial(const RpakLoadAsset& Asset, const string& Path)
 	(void)this->ExtractMaterial(Asset, OutPath, true, true);
 }
 
-RMdlMaterial RpakLib::ExtractMaterial(const RpakLoadAsset& Asset, const string& Path, bool IncludeImages, bool IncludeImageNames)
+RMdlMaterial RpakLib::ExtractMaterial(const RpakLoadAsset& Asset, const string& Path, bool IncludeImages, bool IncludeImageNames, bool silent)
 {
 	RMdlMaterial Result;
 
@@ -269,11 +270,17 @@ RMdlMaterial RpakLib::ExtractMaterial(const RpakLoadAsset& Asset, const string& 
 			hdr.FromV16(hdr_v16);
 		}
 		else hdr = Reader.Read<MaterialHeader>();
+
+		Result.MaterialType = hdr.materialType;
 	}
 	else
 	{
 		MaterialHeaderV12 temp = Reader.Read<MaterialHeaderV12>();
-		hdr.FromV12(temp);
+
+		hdr.pName = temp.pName;
+		hdr.textureHandles = temp.textureHandles;
+		hdr.streamingTextureHandles = temp.streamingTextureHandles;
+		hdr.shaderSetGuid = temp.shaderSetGuid;
 	}
 
 	RpakStream->SetPosition(this->GetFileOffset(Asset, hdr.pName.Index, hdr.pName.Offset));
@@ -282,7 +289,7 @@ RMdlMaterial RpakLib::ExtractMaterial(const RpakLoadAsset& Asset, const string& 
 	Result.MaterialName = IO::Path::GetFileNameWithoutExtension(fullMaterialName);
 	Result.FullMaterialName = fullMaterialName;
 
-	Dictionary<uint32_t, ShaderResBinding> PixelShaderResBindings;
+	List<ShaderResBinding> PixelShaderResBindings;
 
 	bool shadersetLoaded = Assets.ContainsKey(hdr.shaderSetGuid);
 
@@ -294,61 +301,49 @@ RMdlMaterial RpakLib::ExtractMaterial(const RpakLoadAsset& Asset, const string& 
 		uint64_t PixelShaderGuid = ShaderSetHeader.PixelShaderHash;
 
 		if (ShaderSetAsset.AssetVersion <= 11)
-		{
 			PixelShaderGuid = ShaderSetHeader.OldPixelShaderHash;
-		}
 
 		if (Assets.ContainsKey(PixelShaderGuid))
-		{
 			PixelShaderResBindings = ExtractShaderResourceBindings(Assets[PixelShaderGuid], D3D_SHADER_INPUT_TYPE::D3D_SIT_TEXTURE);
-		}
-		else {
-			g_Logger.Warning("Shaderset for material '%s' referenced a pixel shader that is not currently loaded. Unable to associate texture types.\n", Result.MaterialName.ToCString());
-		}
+		//else
+		//	g_Logger.Warning("Shaderset for material '%s' referenced a pixel shader that is not currently loaded. Unable to associate texture types.\n", Result.MaterialName.ToCString());
 	}
 
-	g_Logger.Info("\nMaterial Info for '%s' (%llX)\n", Result.MaterialName.ToCString(), Asset.NameHash);
-
-	if (Asset.Version == RpakGameVersion::Apex)
+	if (!silent)
 	{
-		g_Logger.Info("> Flags: %08X\n", hdr.someFlags);
-		g_Logger.Info("> Unk2: %X\n", hdr.unk2);
-		g_Logger.Info("> Unk3: %X\n", hdr.unk3);
+		g_Logger.Info("Material Info for '%s' (%llX)\n", Result.MaterialName.ToCString(), Asset.NameHash);
+		g_Logger.Info("=================================\n");
+		g_Logger.Info("> ShaderSet: %llx : %llu (%s) \n", hdr.shaderSetGuid, hdr.shaderSetGuid, shadersetLoaded ? "LOADED" : "NOT LOADED");
+		g_Logger.Info("=================================\n");
+	}
+
+	if (Asset.Version == RpakGameVersion::Apex && !silent)
+	{
+		g_Logger.Info("> Flags         : 0x%08X : %d\n", hdr.flags, hdr.flags);
+		g_Logger.Info("> Flags2        : 0x%08X : %d\n", hdr.flags2, hdr.flags2);
+		g_Logger.Info("> VisFlags      : 0x%lX  : %d\n", hdr.m_UnknownSections[0].visFlags, hdr.m_UnknownSections[0].visFlags);
+		g_Logger.Info("> FaceDrawFlags : 0x%lX  : %d\n", hdr.m_UnknownSections[0].faceDrawFlags, hdr.m_UnknownSections[0].faceDrawFlags);
+		g_Logger.Info("> UnkFlags      : 0x%lX  : %d\n", hdr.m_UnknownSections[0].unkRenderFlags, hdr.m_UnknownSections[0].unkRenderFlags);
+		g_Logger.Info("=================================\n");
+		g_Logger.Info("> DepthShadow      : 0x%llX : %llu\n", hdr.materialGuids[0], hdr.materialGuids[0]);
+		g_Logger.Info("> DepthPrepass     : 0x%llX : %llu\n", hdr.materialGuids[1], hdr.materialGuids[1]);
+		g_Logger.Info("> DepthVSM         : 0x%llX : %llu\n", hdr.materialGuids[2], hdr.materialGuids[2]);
+		g_Logger.Info("> DepthShadowTight : 0x%llX : %llu\n", hdr.materialGuids[3], hdr.materialGuids[3]);
+		g_Logger.Info("=================================\n");
 	};
-
-	for (int i = 0; i < 5; i++)
-	{
-		g_Logger.Info("> MaterialRef %i: %llx (%s)\n", i, hdr.materialGuids[i], Assets.ContainsKey(hdr.materialGuids[i]) ? "LOADED" : "NOT LOADED");
-
-	}
-
-	string shadersetName = "(no debug name)";
-	if (shadersetLoaded)
-	{
-		const RpakLoadAsset& shadersetAsset = Assets[hdr.shaderSetGuid];
-
-		RpakStream->SetPosition(this->GetFileOffset(shadersetAsset, shadersetAsset.SubHeaderIndex, shadersetAsset.SubHeaderOffset));
-		ShaderSetHeader ShdsHeader = Reader.Read<ShaderSetHeader>();
-		if ((ShdsHeader.NameIndex || ShdsHeader.NameOffset)
-			&& ShdsHeader.NameIndex < shadersetAsset.PakFile->SegmentBlocks.Count()  // TODO
-		)
-		{
-			RpakStream->SetPosition(this->GetFileOffset(shadersetAsset, ShdsHeader.NameIndex, ShdsHeader.NameOffset));
-
-			shadersetName = Reader.ReadCString();
-		}
-	}
-
-	g_Logger.Info("> ShaderSet: %llx, %s (%s) \n", hdr.shaderSetGuid, shadersetName.ToCString(), shadersetLoaded ? "LOADED" : "NOT LOADED");
 
 	const uint64_t TextureTable = this->GetFileOffset(Asset, hdr.textureHandles.Index, hdr.textureHandles.Offset); // (Asset.Version == RpakGameVersion::Apex) ? : this->GetFileOffset(Asset, hdr.TexturesTFIndex, hdr.TexturesTFOffset);
 	uint32_t TexturesCount = (hdr.streamingTextureHandles.Offset - hdr.textureHandles.Offset) / 8;
-	g_Logger.Info("> %i texture slots:\n", TexturesCount);
+
+	if(!silent)
+	   g_Logger.Info("> %i textures:\n", TexturesCount);
+
+	uint32_t bindingIdx = 0;
 
 	// These textures have named slots
 	for (uint32_t i = 0; i < TexturesCount; i++)
 	{
-		RpakStream->SetPosition(TextureTable + (i * 8ull));
+		RpakStream->SetPosition(TextureTable + ((uint64_t)i * 8));
 
 		uint64_t TextureHash = Reader.Read<uint64_t>();
 		string TextureName = "";
@@ -359,59 +354,60 @@ RMdlMaterial RpakLib::ExtractMaterial(const RpakLoadAsset& Asset, const string& 
 		{
 			TextureName = string::Format("0x%llx%s", TextureHash, (const char*)ImageExtension);
 
-			if (PixelShaderResBindings.Count() > 0 && PixelShaderResBindings.ContainsKey(i))
+			if (PixelShaderResBindings.Count() > 0 && bindingIdx < PixelShaderResBindings.Count())
 			{
+				string ResName = PixelShaderResBindings[bindingIdx].Name;
+				if (!ExportManager::Config.GetBool("UseTxtrGuids"))
+				{
+					TextureName = string::Format("%s_%s%s", Result.MaterialName.ToCString(), ResName.ToCString(), (const char*)ImageExtension);
+				}
 				bOverridden = true;
 
-				string resourceName = PixelShaderResBindings[i].Name;
-
-				if (!ExportManager::Config.GetBool("UseTxtrGuids"))
-					TextureName = string::Format("%s_%s%s", Result.MaterialName.ToCString(), resourceName.ToCString(), (const char*)ImageExtension);
-
-				if (resourceName == "normalTexture")
+				if (ResName == "normalTexture")
 					bNormalRecalculate = true;
 			}
 
+			if (Asset.Version == RpakGameVersion::Apex && !silent)
+				g_Logger.Info(">> %i: 0x%llx - %s\n", i, TextureHash, bOverridden ? TextureName.ToCString() : "(no assigned name)");
+
 			switch (i)
 			{
-			case eTextureType::ALBEDO:
+			case 0:
 				Result.AlbedoHash = TextureHash;
 				Result.AlbedoMapName = TextureName;
 				break;
-			case eTextureType::NORMAL:
+			case 1:
 				Result.NormalHash = TextureHash;
 				Result.NormalMapName = TextureName;
 				break;
-			case eTextureType::GLOSS:
+			case 2:
 				Result.GlossHash = TextureHash;
 				Result.GlossMapName = TextureName;
 				break;
-			case eTextureType::SPECULAR:
+			case 3:
 				Result.SpecularHash = TextureHash;
 				Result.SpecularMapName = TextureName;
 				break;
-			case eTextureType::EMISSIVE:
+			case 4:
 				Result.EmissiveHash = TextureHash;
 				Result.EmissiveMapName = TextureName;
 				break;
-			case eTextureType::AO:
+			case 5:
 				Result.AmbientOcclusionHash = TextureHash;
 				Result.AmbientOcclusionMapName = TextureName;
 				break;
-			case eTextureType::CAVITY:
+			case 6:
 				Result.CavityHash = TextureHash;
 				Result.CavityMapName = TextureName;
 				break;
 			}
+			bindingIdx++;
 
-
-			if (Asset.Version == RpakGameVersion::Apex)
-				g_Logger.Info(">> %i: 0x%llx - %s\n", i, TextureHash, bOverridden ? TextureName.ToCString() : "(no assigned name)");
 		}
 		else
 		{
 			if (Asset.Version == RpakGameVersion::Apex)
-				g_Logger.Info(">> %i: empty\n", i);
+				g_Logger.Info(">> %i: 0x0\n", i);
 		}
 
 		// Extract to disk if need be
@@ -426,7 +422,8 @@ RMdlMaterial RpakLib::ExtractMaterial(const RpakLoadAsset& Asset, const string& 
 		}
 	}
 
-	g_Logger.Info("\n");
+	if(!silent)
+	    g_Logger.Info("=================================\n\n");
 
 	return Result;
 }

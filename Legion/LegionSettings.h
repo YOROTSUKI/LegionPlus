@@ -60,13 +60,13 @@ private:
 	UIX::UIXCheckBox* LoadUIImages;
 	UIX::UIXCheckBox* LoadDataTables;
 	UIX::UIXCheckBox* LoadSettingsSets;
-	UIX::UIXCheckBox* LoadWrappedFiles;
 	// Toggles
 	UIX::UIXCheckBox* ToggleOverwriting;
 	UIX::UIXCheckBox* ToggleAudioLanguageFolders;
 	UIX::UIXCheckBox* ToggleUseFullPaths;
 	UIX::UIXCheckBox* ToggleUseTxtrGuids;
-	UIX::UIXCheckBox* ToggleSkinExport;
+	UIX::UIXCheckBox* ToggleModelMatExport;
+
 	// Export Types
 	UIX::UIXComboBox* ModelExportFormat;
 	UIX::UIXComboBox* AnimExportFormat;

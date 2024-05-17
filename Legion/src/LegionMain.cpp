@@ -1,9 +1,6 @@
 #include "pch.h"
 #include "LegionMain.h"
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <vector>
+
 #include "UIXButton.h"
 #include "UIXTextBox.h"
 #include "UIXListView.h"
@@ -11,7 +8,6 @@
 #include "LegionTitanfallConverter.h"
 #include "LegionTablePreview.h"
 #include <version.h>
-
 
 LegionMain::LegionMain()
 	: Forms::Form(), IsInExportMode(false)
@@ -30,23 +26,22 @@ void LegionMain::InitializeComponent()
 	this->SetMinimumSize({ 791, 520 });
 	this->SetStartPosition(Forms::FormStartPosition::CenterScreen);
 
-	this->DumpSkinListButton = new UIX::UIXButton();
-	this->DumpSkinListButton->SetSize({ 78, 27 });
-	this->DumpSkinListButton->SetLocation({ 290, 446 });
-	this->DumpSkinListButton->SetTabIndex(9);
-	this->DumpSkinListButton->SetText("DumpSkinList");
-	this->DumpSkinListButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
-	this->DumpSkinListButton->Click += &DumpSkinListClick;
-	this->AddControl(this->DumpSkinListButton);
+	this->SearchBox = new UIX::UIXTextBox();
+	this->SearchBox->SetSize({ 272, 24 });
+	this->SearchBox->SetLocation({ 12, 8 });
+	this->SearchBox->SetTabIndex(5);
+	this->SearchBox->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
+	this->SearchBox->KeyPress += &OnSearchKeyPressed;
+	this->AddControl(this->SearchBox);
 
-	this->RefreshAssetsButton = new UIX::UIXButton();
-	this->RefreshAssetsButton->SetSize({ 78, 27 });
-	this->RefreshAssetsButton->SetLocation({ 374, 446 });
-	this->RefreshAssetsButton->SetTabIndex(9);
-	this->RefreshAssetsButton->SetText("Refresh");
-	this->RefreshAssetsButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
-	this->RefreshAssetsButton->Click += &OnRefreshClick;
-	this->AddControl(this->RefreshAssetsButton);
+	this->SearchButton = new UIX::UIXButton();
+	this->SearchButton->SetSize({ 85, 24 });
+	this->SearchButton->SetLocation({ 290, 8 });
+	this->SearchButton->SetTabIndex(6);
+	this->SearchButton->SetText("Search");
+	this->SearchButton->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
+	this->SearchButton->Click += &OnSearchClick;
+	this->AddControl(this->SearchButton);
 
 	this->ClearSearchButton = new UIX::UIXButton();
 	this->ClearSearchButton->SetSize({ 85, 24 });
@@ -67,49 +62,59 @@ void LegionMain::InitializeComponent()
 	this->StatusLabel->SetTextAlign(Drawing::ContentAlignment::MiddleRight);
 	this->AddControl(this->StatusLabel);
 
-	this->SearchButton = new UIX::UIXButton();
-	this->SearchButton->SetSize({ 85, 24 });
-	this->SearchButton->SetLocation({ 290, 8 });
-	this->SearchButton->SetTabIndex(6);
-	this->SearchButton->SetText("Search");
-	this->SearchButton->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
-	this->SearchButton->Click += &OnSearchClick;
-	this->AddControl(this->SearchButton);
-
-	this->SearchBox = new UIX::UIXTextBox();
-	this->SearchBox->SetSize({ 272, 24 });
-	this->SearchBox->SetLocation({ 12, 8 });
-	this->SearchBox->SetTabIndex(5);
-	this->SearchBox->SetAnchor(Forms::AnchorStyles::Top | Forms::AnchorStyles::Left);
-	this->SearchBox->KeyPress += &OnSearchKeyPressed;
-	this->AddControl(this->SearchBox);
-
-	this->ExportAllButton = new UIX::UIXButton();
-	this->ExportAllButton->SetSize({ 78, 27 });
-	this->ExportAllButton->SetLocation({ 206, 446});
-	this->ExportAllButton->SetTabIndex(4);
-	this->ExportAllButton->SetText("Export All");
-	this->ExportAllButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
-	this->ExportAllButton->Click += &OnExpAllClick;
-	this->AddControl(this->ExportAllButton);
+	this->LoadRPakButton = new UIX::UIXButton();
+	this->LoadRPakButton->SetSize({ 85, 27 });
+	this->LoadRPakButton->SetLocation({ 12, 446 });
+	this->LoadRPakButton->SetTabIndex(2);
+	this->LoadRPakButton->SetText("Load File");
+	this->LoadRPakButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
+	this->LoadRPakButton->Click += &OnLoadClick;
+	this->AddControl(this->LoadRPakButton);
 
 	this->ExportSelectedButton = new UIX::UIXButton();
 	this->ExportSelectedButton->SetSize({ 97, 27 });
-	this->ExportSelectedButton->SetLocation({ 103, 446});
+	this->ExportSelectedButton->SetLocation({ 103, 446 });
 	this->ExportSelectedButton->SetTabIndex(3);
 	this->ExportSelectedButton->SetText("Export Selected");
 	this->ExportSelectedButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
 	this->ExportSelectedButton->Click += &OnExpClick;
 	this->AddControl(this->ExportSelectedButton);
 
-	this->LoadRPakButton = new UIX::UIXButton();
-	this->LoadRPakButton->SetSize({ 85, 27 });
-	this->LoadRPakButton->SetLocation({ 12, 446});
-	this->LoadRPakButton->SetTabIndex(2);
-	this->LoadRPakButton->SetText("Load File");
-	this->LoadRPakButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
-	this->LoadRPakButton->Click += &OnLoadClick;
-	this->AddControl(this->LoadRPakButton);
+	this->ExportAllButton = new UIX::UIXButton();
+	this->ExportAllButton->SetSize({ 78, 27 });
+	this->ExportAllButton->SetLocation({ 206, 446 });
+	this->ExportAllButton->SetTabIndex(4);
+	this->ExportAllButton->SetText("Export All");
+	this->ExportAllButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
+	this->ExportAllButton->Click += &OnExpAllClick;
+	this->AddControl(this->ExportAllButton);
+
+	this->DumpAssetListButton = new UIX::UIXButton();
+	this->DumpAssetListButton->SetSize({ 78, 27 });
+	this->DumpAssetListButton->SetLocation({ 290, 446 });
+	this->DumpAssetListButton->SetTabIndex(9);
+	this->DumpAssetListButton->SetText("Dump List");
+	this->DumpAssetListButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
+	this->DumpAssetListButton->Click += &OnDumpAssetListClick;
+	this->AddControl(this->DumpAssetListButton);
+
+	this->TitanfallConverterButton = new UIX::UIXButton();
+	this->TitanfallConverterButton->SetSize({ 78, 27 });
+	this->TitanfallConverterButton->SetLocation({ 374, 446 });
+	this->TitanfallConverterButton->SetTabIndex(9);
+	this->TitanfallConverterButton->SetText("Titanfall 2");
+	this->TitanfallConverterButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
+	this->TitanfallConverterButton->Click += &OnTitanfallClick;
+	this->AddControl(this->TitanfallConverterButton);
+
+	this->RefreshAssetsButton = new UIX::UIXButton();
+	this->RefreshAssetsButton->SetSize({ 78, 27 });
+	this->RefreshAssetsButton->SetLocation({ 458, 446 });
+	this->RefreshAssetsButton->SetTabIndex(9);
+	this->RefreshAssetsButton->SetText("Refresh");
+	this->RefreshAssetsButton->SetAnchor(Forms::AnchorStyles::Bottom | Forms::AnchorStyles::Left);
+	this->RefreshAssetsButton->Click += &OnRefreshClick;
+	this->AddControl(this->RefreshAssetsButton);
 
 	this->SettingsButton = new UIX::UIXButton();
 	this->SettingsButton->SetSize({ 80, 27 });
@@ -486,112 +491,6 @@ void LegionMain::SetAssetError(int32_t AssetIndex)
 	(*this->LoadedAssets)[this->DisplayIndices[AssetIndex]].Status = ApexAssetStatus::Error;
 }
 
-List<string> LegionMain::GetMaterialList(const Assets::Model& Model)
-{
-	List<string> _MaterialSkinNameList = Model.SkinMaterialNames;
-
-	return _MaterialSkinNameList;
-}
-
-void writeToCSV(const std::string& filename, const std::vector<std::vector<string>>& data) {
-	// Ensure valid filename (optional)
-	if (filename.empty()) {
-		std::cerr << "Error: Empty filename provided." << std::endl;
-		return;
-	}
-	try {
-		// Combine filename with potentially relative path using filesystem
-		const std::filesystem::path full_path = std::filesystem::current_path() / filename;
-		g_Logger.Info(full_path.string());
-		// Open file for writing
-		std::ofstream file(full_path.string());
-
-		// Handle file opening error
-		if (!file.is_open()) {
-			std::cerr << "Error opening CSV file: " << full_path << std::endl;
-			return;
-		}
-
-		// Write data to file
-		for (const auto& row : data) {
-			// Handle empty row (optional)
-			if (row.empty()) {
-				continue; // Skip to next row
-			}
-
-			bool first_cell = true;
-			for (const auto& cell : row) {
-				if (!first_cell) {
-					file << ","; // Separate cells with commas
-				}
-				file << cell;
-				first_cell = false;
-			}
-			file << std::endl; // Newline for each row
-		}
-
-		// Close the file (implicitly handled by destructor in modern C++)
-	}
-	catch (const std::filesystem::filesystem_error& e) {
-		std::cerr << "Error: File system operation failed with exception: " << e.what() << std::endl;
-	}
-}
-
-void LegionMain::DumpSkinList()
-{	
-	// building file name
-	string SearchText = this->SearchBox->Text();
-
-	if (SearchText == "") {
-		SearchText = "Default";
-	};
-	string file_name = SearchText+".csv";
-
-	
-	
-	List<ExportAsset> AssetsToExport(this->DisplayIndices.Count(), true);
-
-	// std::vector<string> Header = { "Model_Name", "Skin_Name" };
-	std::vector<std::vector<string>> SkinData;
-	SkinData.push_back({ "Model_Name", "Skin_Name" });
-
-	for (uint32_t i = 0; i < AssetsToExport.Count(); i++)
-	{
-		auto& DisplayIndex = this->DisplayIndices[i];
-		auto& Asset = (*this->LoadedAssets.get())[DisplayIndex];
-
-		switch (Asset.Type)
-		{
-			
-		case ApexAssetType::Model:
-			{
-				string model_name = Asset.Name;
-				g_Logger.Info(model_name);
-				auto& Asset_Hash = Asset.Hash;
-				
-				// auto Mdl = this->RpakFileSystem->BuildPreviewModel(Asset_Hash).get();
-				uint64_t fct = (Asset.FileCreatedTime / 10000000) - 0x2b6109100;
-				auto Mdl = this->RpakFileSystem->BuildPreviewModel(Asset_Hash);
-				if (Mdl == nullptr)
-					return;
-				List<string> _MaterialSkinNameList = GetMaterialList(*Mdl.get());
-
-
-				for (int i = 0; i < _MaterialSkinNameList.Count(); i++)
-				{
-					SkinData.push_back({ model_name,_MaterialSkinNameList[i]});
-				}
-
-
-			}
-			break;
-		};
-	}
-	
-	writeToCSV(std::string(file_name), SkinData);
-}
-
-
 void LegionMain::DoPreviewSwap()
 {
 	if (!this->RpakFileSystem || !this->PreviewWindow || this->PreviewWindow->GetHandle() == nullptr)
@@ -653,7 +552,7 @@ void LegionMain::RefreshView()
 	{
 		this->AssetsListView->SetVirtualListSize(0);
 
-		std::array<bool, 12> bAssets = {
+		std::array<bool, 11> bAssets = {
 			ExportManager::Config.GetBool("LoadModels"),
 			ExportManager::Config.GetBool("LoadAnimations"),
 			ExportManager::Config.GetBool("LoadAnimationSeqs"),
@@ -664,9 +563,7 @@ void LegionMain::RefreshView()
 			ExportManager::Config.GetBool("LoadShaderSets"),
 			ExportManager::Config.GetBool("LoadSettingsSets"),
 			ExportManager::Config.GetBool("LoadRSONs"),
-			ExportManager::Config.GetBool("LoadEffects"),
-			ExportManager::Config.GetBool("LoadWrappedFiles"),
-
+			ExportManager::Config.GetBool("LoadEffects")
 		};
 
 		this->LoadedAssets = this->RpakFileSystem->BuildAssetList(bAssets);
@@ -691,6 +588,62 @@ void LegionMain::RefreshView()
 		this->SearchBox->SetText(SearchText);
 
 		this->SearchForAssets();
+	}
+}
+
+void LegionMain::OnDumpAssetListClick(Forms::Control* Sender)
+{
+	List<string> OpenFileD = OpenFileDialog::ShowMultiFileDialog("Legion+: Select file(s) to dump", "", "Apex Legends Files (MBnk, RPak)|*.mbnk;*.rpak;", Sender->FindForm());
+
+	if (OpenFileD.Count() == 0)
+		return;
+	else if (OpenFileD.Count() > MAX_LOADED_FILES)
+	{
+		string msg = string::Format("Please select %i or fewer files.", MAX_LOADED_FILES);
+		MessageBox::Show(msg, "Legion+", Forms::MessageBoxButtons::OK, Forms::MessageBoxIcon::Warning);
+		return;
+	}
+
+	List<ExportAsset> ExportAssets;
+
+	std::array<bool, 11> bAssets = {
+		ExportManager::Config.GetBool("LoadModels"),
+		ExportManager::Config.GetBool("LoadAnimations"),
+		ExportManager::Config.GetBool("LoadAnimationSeqs"),
+		ExportManager::Config.GetBool("LoadImages"),
+		ExportManager::Config.GetBool("LoadMaterials"),
+		ExportManager::Config.GetBool("LoadUIImages"),
+		ExportManager::Config.GetBool("LoadDataTables"),
+		ExportManager::Config.GetBool("LoadShaderSets"),
+		ExportManager::Config.GetBool("LoadSettingsSets"),
+		ExportManager::Config.GetBool("LoadRSONs"),
+		ExportManager::Config.GetBool("LoadEffects")
+	};
+
+	std::unique_ptr<List<ApexAsset>> AssetList;
+
+	for (uint32_t i = 0; i < OpenFileD.Count(); i++)
+	{
+		string& filepath = OpenFileD[i];
+		string filename = IO::Path::GetFileNameWithoutExtension(filepath);
+
+		if (filepath.EndsWith(".rpak"))
+		{
+			std::unique_ptr<RpakLib> Rpak = std::make_unique<RpakLib>();
+			Rpak->LoadRpak(filepath);
+			Rpak->PatchAssets();
+			AssetList = Rpak->BuildAssetList(bAssets);
+
+			ExportManager::ExportAssetList(AssetList, filename, filepath);
+		}
+		else if (filepath.EndsWith(".mbnk"))
+		{
+			std::unique_ptr<MilesLib> Audio = std::make_unique<MilesLib>();
+			Audio->MountBank(filepath);
+			AssetList = Audio->BuildAssetList();
+
+			ExportManager::ExportAssetList(AssetList, filename, filepath);
+		}
 	}
 }
 
@@ -779,13 +732,6 @@ void LegionMain::OnRefreshClick(Forms::Control* Sender)
 	LegionMain* ThisPtr = (LegionMain*)Sender->FindForm();
 
 	ThisPtr->RefreshView();
-}
-
-void LegionMain::DumpSkinListClick(Forms::Control* Sender)
-{
-	LegionMain* ThisPtr = (LegionMain*)Sender->FindForm();
-
-	ThisPtr->DumpSkinList();
 }
 
 void LegionMain::OnListRightClick(const std::unique_ptr<MouseEventArgs>& EventArgs, Forms::Control* Sender)
@@ -931,7 +877,7 @@ void LegionMain::GetVirtualItem(const std::unique_ptr<Forms::RetrieveVirtualItem
 		Drawing::Color(4, 197, 4),    // RUI
 		Drawing::Color(131 ,69, 255), // Map
 		Drawing::Color(17, 221, 191), // Effect
-		Drawing::Color(128,128,255),  // Wrapped Files
+		Drawing::Color(128,128,255), // Wrap
 	};
 
 	static const char* AssetStatus[] = { "Loaded", "Exporting", "Exported", "Error" };

@@ -9,10 +9,6 @@
 #include "KoreTheme.h"
 #include "bsplib.h"
 #include "CommandLine.h"
-#include<iostream>
-#include<string>
-#include <locale>
-#include <codecvt>
 
 #pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
@@ -28,8 +24,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 	UIX::UIXTheme::InitializeRenderer(new Themes::KoreTheme());
 	ExportManager::InitializeExporter();
-
-	std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
 
 	bool ShowGUI = true;
 	wstring sFileToLoad;
@@ -88,7 +82,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			filePath = wstring(cmdline.GetParamValue(L"--list")).ToString();
 		}
 
-		
 		// handle cli stuff
 		if (!string::IsNullOrEmpty(filePath))
 		{
@@ -151,6 +144,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 					AnimFmt = AnimExportFormat_t::Cast;
 				if (sFmt == L"ranim")
 					AnimFmt = AnimExportFormat_t::RAnim;
+				if (sFmt == L"smd")
+					AnimFmt = AnimExportFormat_t::SMD;
 
 				if (AnimFmt != (AnimExportFormat_t)ExportManager::Config.Get<System::SettingType::Integer>("AnimFormat"))
 					ExportManager::Config.Set<System::SettingType::Integer>("AnimFormat", (uint32_t)AnimFmt);
@@ -273,13 +268,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			bool bLoadShaderSets = cmdline.HasParam(L"--loadshadersets");
 			bool bLoadSettingsSets = cmdline.HasParam(L"--loadsettingssets");
 			bool bLoadRSONs = cmdline.HasParam(L"--loadrsons");
-			bool bLoadWrappedFiles = cmdline.HasParam(L"--loadwrappedfiles");
 
-			bool bNoFlagsSpecified = !bLoadModels && !bLoadAnims && !BLoadAnimSeqs && !bLoadImages && !bLoadMaterials && !bLoadUIImages && !bLoadDataTables && !bLoadShaderSets && !bLoadSettingsSets && !bLoadRSONs && !bLoadWrappedFiles;
+			bool bNoFlagsSpecified = !bLoadModels && !bLoadAnims && !BLoadAnimSeqs && !bLoadImages && !bLoadMaterials && !bLoadUIImages && !bLoadDataTables && !bLoadShaderSets && !bLoadSettingsSets && !bLoadRSONs;
 
 			if (bNoFlagsSpecified)
 			{
-				std::array<bool, 12> bAssets = {
+				std::array<bool, 11> bAssets = {
 					ExportManager::Config.GetBool("LoadModels"),
 					ExportManager::Config.GetBool("LoadAnimations"),
 					ExportManager::Config.GetBool("LoadAnimationSeqs"),
@@ -290,15 +284,14 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 					ExportManager::Config.GetBool("LoadShaderSets"),
 					ExportManager::Config.GetBool("LoadSettingsSets"),
 					ExportManager::Config.GetBool("LoadRSONs"),
-					ExportManager::Config.GetBool("LoadEffects"),
-					ExportManager::Config.GetBool("LoadWrappedFiles"),
+					ExportManager::Config.GetBool("LoadEffects")
 				};
 
 				AssetList = Rpak->BuildAssetList(bAssets);
 			}
 			else
 			{
-				std::array<bool, 12> bAssets = {
+				std::array<bool, 11> bAssets = {
 					bLoadModels,
 					bLoadAnims,
 					BLoadAnimSeqs,
@@ -309,8 +302,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 					bLoadShaderSets,
 					bLoadSettingsSets,
 					bLoadRSONs,
-					false, // not ready yet.
-					bLoadWrappedFiles
+					false // not ready yet.
 				};
 
 				AssetList = Rpak->BuildAssetList(bAssets);
@@ -318,84 +310,37 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 			if (bExportFile)
 			{
-				bool bHasKeyword = cmdline.HasParam(L"--keyword");	
-				if (bHasKeyword) {
-					wstring sKeyword = cmdline.GetParamValue(L"--keyword");
-					sKeyword = sKeyword.ToLower();
-					if (filePath.EndsWith(".rpak")) {
-						for (auto& Asset : *AssetList.get())
-						{
-							
-							if (Asset.Name == converter.to_bytes(sKeyword)) {
-								ExportAsset EAsset;
-								EAsset.AssetHash = Asset.Hash;
-								EAsset.AssetIndex = 0;
-								ExportAssets.EmplaceBack(EAsset);
-								break;
-							}	
-						}
-						ExportManager::ExportRpakAssets(Rpak, ExportAssets, [](uint32_t i, Forms::Form*, bool) {}, [](int32_t i, Forms::Form*) -> bool { return false; }, nullptr);
+				if (filePath.EndsWith(".rpak")) {
+					for (auto& Asset : *AssetList.get())
+					{
+						ExportAsset EAsset;
+						EAsset.AssetHash = Asset.Hash;
+						EAsset.AssetIndex = 0;
+						ExportAssets.EmplaceBack(EAsset);
 					}
-					else if (filePath.EndsWith(".mbnk")) {
-
-						auto Audio = std::make_unique<MilesLib>();
-
-						Audio->MountBank(filePath);
-						Audio->Initialize();
-
-						AssetList = Audio->BuildAssetList();
-						for (auto& Asset : *AssetList.get())
-						{
-							if (Asset.Name == converter.to_bytes(sKeyword)) {
-								ExportAsset EAsset;
-								EAsset.AssetHash = Asset.Hash;
-								EAsset.AssetIndex = 0;
-								ExportAssets.EmplaceBack(EAsset);
-								break;
-							}
-						}
-						ExportManager::ExportMilesAssets(Audio, ExportAssets, [](uint32_t i, Forms::Form*, bool) {}, [](int32_t i, Forms::Form*) -> bool { return false; }, nullptr);
-					}
-					else if (!filePath.EndsWith(".rpak" || ".mbnk")) {
-
-						g_Logger.Info("You loaded a file extension that isn't supported, the --export flag only supports .rpak and .mbnk file extensions");
-
-					}
+					ExportManager::ExportRpakAssets(Rpak, ExportAssets, [](uint32_t i, Forms::Form*, bool) {}, [](int32_t i, Forms::Form*) -> bool { return false; }, nullptr);
 				}
-				else
-				{
-					if (filePath.EndsWith(".rpak")) {
-						for (auto& Asset : *AssetList.get())
-						{
-							ExportAsset EAsset;
-							EAsset.AssetHash = Asset.Hash;
-							EAsset.AssetIndex = 0;
-							ExportAssets.EmplaceBack(EAsset);
-						}
-						ExportManager::ExportRpakAssets(Rpak, ExportAssets, [](uint32_t i, Forms::Form*, bool) {}, [](int32_t i, Forms::Form*) -> bool { return false; }, nullptr);
+				else if (filePath.EndsWith(".mbnk")) {
+
+					auto Audio = std::make_unique<MilesLib>();
+
+					Audio->MountBank(filePath);
+					Audio->Initialize();
+
+					AssetList = Audio->BuildAssetList();
+					for (auto& Asset : *AssetList.get())
+					{
+						ExportAsset EAsset;
+						EAsset.AssetHash = Asset.Hash;
+						EAsset.AssetIndex = 0;
+						ExportAssets.EmplaceBack(EAsset);
 					}
-					else if (filePath.EndsWith(".mbnk")) {
+					ExportManager::ExportMilesAssets(Audio, ExportAssets, [](uint32_t i, Forms::Form*, bool) {}, [](int32_t i, Forms::Form*) -> bool { return false; }, nullptr);
+				}
+				else if (!filePath.EndsWith(".rpak" || ".mbnk")) {
 
-						auto Audio = std::make_unique<MilesLib>();
+					g_Logger.Info("You loaded a file extension that isn't supported, the --export flag only supports .rpak and .mbnk file extensions");
 
-						Audio->MountBank(filePath);
-						Audio->Initialize();
-
-						AssetList = Audio->BuildAssetList();
-						for (auto& Asset : *AssetList.get())
-						{
-							ExportAsset EAsset;
-							EAsset.AssetHash = Asset.Hash;
-							EAsset.AssetIndex = 0;
-							ExportAssets.EmplaceBack(EAsset);
-						}
-						ExportManager::ExportMilesAssets(Audio, ExportAssets, [](uint32_t i, Forms::Form*, bool) {}, [](int32_t i, Forms::Form*) -> bool { return false; }, nullptr);
-					}
-					else if (!filePath.EndsWith(".rpak" || ".mbnk")) {
-
-						g_Logger.Info("You loaded a file extension that isn't supported, the --export flag only supports .rpak and .mbnk file extensions");
-
-					}
 				}
 			}
 			else if (bExportList)

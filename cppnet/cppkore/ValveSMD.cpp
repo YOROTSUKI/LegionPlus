@@ -5,17 +5,17 @@
 #include "Path.h"
 #include "MathHelper.h"
 #include "StreamWriter.h"
+#include <vector>
 
 namespace Assets::Exporters
 {
 	void ProcessVertex(IO::StreamWriter& Writer, const Vertex& Vertex)
 	{
-		auto Normal = Vertex.Normal().GetNormalized();
+		const Vector3 Normal = Vertex.Normal().GetNormalized();
+		const Vector3& Position = Vertex.Position();
+		const Vector2& UVLayer = Vertex.UVLayers(0);
 
-		auto& Position = Vertex.Position();
-		auto& UVLayer = Vertex.UVLayers(0);
-
-		Writer.WriteFmt("0 %f %f %f %f %f %f %f %f %d ", Position.X, Position.Y, Position.Z, Normal.X, Normal.Y, Normal.Z, UVLayer.U, (1 - UVLayer.V), Vertex.WeightCount());
+		Writer.WriteFmt("\t0 %f %f %f %f %f %f %f %f %d ", Position.X, Position.Y, Position.Z, Normal.X, Normal.Y, Normal.Z, UVLayer.U, (1 - UVLayer.V), Vertex.WeightCount());
 
 		for (uint8_t i = 0; i < Vertex.WeightCount(); i++)
 			Writer.WriteFmt("%d %f ", Vertex.Weights(i).Bone, Vertex.Weights(i).Value);
@@ -23,14 +23,48 @@ namespace Assets::Exporters
 		Writer.Write("\n");
 	}
 
-	bool ValveSMD::ExportAnimation(const Animation& Animation, const string& Path)
+	void GetBoneAnimation(int frame, List <Assets::Curve>& Curves, Vector3& Pos, Vector3& Rot)
 	{
-		return false;
+		for (Assets::CurveKeyframe& KeyFrame : Curves[0].Keyframes)
+		{
+			if (KeyFrame.Frame.Integer32 == frame)
+			{
+				Rot = KeyFrame.Value.Vector4.ToEulerAngles();
+				break;
+			}
+		}
+
+		for (Assets::CurveKeyframe& KeyFrame : Curves[1].Keyframes)
+		{
+			if (KeyFrame.Frame.Integer32 == frame)
+			{
+				Pos.X = KeyFrame.Value.Float;
+				break;
+			}
+		}
+
+		for (Assets::CurveKeyframe& KeyFrame : Curves[2].Keyframes)
+		{
+			if (KeyFrame.Frame.Integer32 == frame)
+			{
+				Pos.Y = KeyFrame.Value.Float;
+				break;
+			}
+		}
+
+		for (Assets::CurveKeyframe& KeyFrame : Curves[3].Keyframes)
+		{
+			if (KeyFrame.Frame.Integer32 == frame)
+			{
+				Pos.Z = KeyFrame.Value.Float;
+				break;
+			}
+		}
 	}
 
-	bool ValveSMD::ExportModel(const Model& Model, const string& Path)
+	bool ValveSMD::ExportAnimation(const Animation& Animation, const string& Path)
 	{
-		auto Writer = IO::StreamWriter(IO::File::Create(Path));
+		IO::StreamWriter Writer = IO::StreamWriter(IO::File::Create(Path));
 
 		Writer.WriteLine(
 			"version 1\n"
@@ -39,9 +73,70 @@ namespace Assets::Exporters
 
 		uint32_t BoneIndex = 0;
 
-		for (auto& Bone : Model.Bones)
+		for (Assets::Bone& Bone : Animation.Bones)
 		{
-			Writer.WriteLineFmt("%d \"%s\" %d", BoneIndex, (char*)Bone.Name(), Bone.Parent());
+			Writer.WriteLineFmt("\t%d \"%s\" %d", BoneIndex, (char*)Bone.Name(), Bone.Parent());
+			BoneIndex++;
+		}
+
+		Writer.Write(
+			"end\n"
+			"skeleton\n"
+		);
+
+		std::vector<bool> UsedFirstLocalPos(Animation.Bones.Count());
+
+		for (int i = 0; i < Animation.FrameCount(); i++)
+		{
+			Writer.WriteLineFmt("time %d", i);
+
+			UsedFirstLocalPos.clear();
+			UsedFirstLocalPos.resize(Animation.Bones.Count());
+
+			for (int j = 0; j < Animation.Bones.Count(); j++)
+			{
+				Assets::Bone& Bone = Animation.Bones[j];
+				auto& Curves = Animation.Curves[Bone.Name()];
+
+				Vector3 Pos{}, Rot{};
+				GetBoneAnimation(i, Curves, Pos, Rot);
+
+				if (Pos == Vector3(0, 0, 0) && !UsedFirstLocalPos[j])
+				{
+					Pos = Bone.LocalPosition();
+
+					if (Rot == Vector3(0, 0, 0))
+						Rot = Bone.LocalRotation().ToEulerAngles();
+
+					UsedFirstLocalPos[j] = true;
+				}
+
+				if (Pos == Vector3(0, 0, 0) && Rot == Vector3(0, 0, 0))
+					continue;
+
+				Writer.WriteLineFmt("\t%d %f %f %f %f %f %f", j, Pos.X, Pos.Y, Pos.Z, MathHelper::DegreesToRadians(Rot.X), MathHelper::DegreesToRadians(Rot.Y), MathHelper::DegreesToRadians(Rot.Z));
+			}
+		}
+
+		Writer.WriteLine("end");
+
+		Writer.Close();
+
+		return false;
+	}
+
+	void WriteSubMesh(IO::StreamWriter& Writer, const Model& Model, const List<int>& MeshIds, const string& Path)
+	{
+		Writer.WriteLine(
+			"version 1\n"
+			"nodes"
+		);
+
+		uint32_t BoneIndex = 0;
+
+		for (Assets::Bone& Bone : Model.Bones)
+		{
+			Writer.WriteLineFmt("\t%d \"%s\" %d", BoneIndex, (char*)Bone.Name(), Bone.Parent());
 			BoneIndex++;
 		}
 
@@ -53,24 +148,26 @@ namespace Assets::Exporters
 
 		BoneIndex = 0;
 
-		for (auto& Bone : Model.Bones)
+		for (Assets::Bone& Bone : Model.Bones)
 		{
-			auto Euler = Bone.LocalRotation().ToEulerAngles();
+			Vector3 Euler = Bone.LocalRotation().ToEulerAngles();
 
-			Writer.WriteLineFmt("%d %f %f %f %f %f %f", BoneIndex, Bone.LocalPosition().X, Bone.LocalPosition().Y, Bone.LocalPosition().Z, MathHelper::DegreesToRadians(Euler.X), MathHelper::DegreesToRadians(Euler.Y), MathHelper::DegreesToRadians(Euler.Z));
+			Writer.WriteLineFmt("  %d %f %f %f %f %f %f", BoneIndex, Bone.LocalPosition().X, Bone.LocalPosition().Y, Bone.LocalPosition().Z, MathHelper::DegreesToRadians(Euler.X), MathHelper::DegreesToRadians(Euler.Y), MathHelper::DegreesToRadians(Euler.Z));
 			BoneIndex++;
 		}
 
 		Writer.WriteLine("end");
 
-		for (auto& Submesh : Model.Meshes)
+		Writer.WriteLine("triangles");
+
+		for (auto& SubmeshId : MeshIds)
 		{
-			Writer.WriteLine("triangles");
+			Assets::Mesh& Submesh = Model.Meshes[SubmeshId];
 
 			for (auto& Face : Submesh.Faces)
 			{
 				if (Submesh.MaterialIndices[0] > -1)
-					Writer.WriteLine(Model.Materials[Submesh.MaterialIndices[0]].Name);
+					Writer.WriteLine(IO::Path::GetFileNameWithoutExtension(Model.Materials[Submesh.MaterialIndices[0]].Name));
 				else
 					Writer.WriteLine("default_material");
 
@@ -78,8 +175,37 @@ namespace Assets::Exporters
 				ProcessVertex(Writer, Submesh.Vertices[Face[1]]);
 				ProcessVertex(Writer, Submesh.Vertices[Face[0]]);
 			}
+		}
 
-			Writer.WriteLine("end");
+		Writer.WriteLine("end");
+	}
+
+	bool ValveSMD::ExportModel(const Model& Model, const string& Path)
+	{
+		for (auto& Bodypart : Model.BodyParts)
+		{
+			if (Bodypart.Models.Count() < 1)
+				continue;
+
+			const string BodyPath = IO::Path::Combine(IO::Path::GetDirectoryName(Path), Bodypart.Name);
+
+			string NewPath = BodyPath + ModelExtension().ToCString();
+
+			if (Bodypart.Models.Count() >= 3)
+			{
+				for (int i = 0; i < Bodypart.Models.Count(); i++)
+				{
+					NewPath = BodyPath + (string::Format("_%d", i).ToCString()) + ModelExtension().ToCString();
+
+					IO::StreamWriter Writer = IO::StreamWriter(IO::File::Create(NewPath));
+					WriteSubMesh(Writer, Model, Bodypart.Models[i].MeshIndexes, NewPath);
+				}
+			}
+			else
+			{
+				IO::StreamWriter Writer = IO::StreamWriter(IO::File::Create(NewPath));
+				WriteSubMesh(Writer, Model, Bodypart.Models[0].MeshIndexes, NewPath);
+			}
 		}
 
 		return true;

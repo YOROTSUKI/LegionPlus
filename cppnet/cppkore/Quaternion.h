@@ -18,6 +18,9 @@ namespace Math
 		float Z;
 		float W;
 
+		// Array index operator
+		float& operator[](int Index);
+
 		// Logical operators
 		Quaternion operator+(const Quaternion& Rhs) const;
 		Quaternion operator-(const Quaternion& Rhs) const;
@@ -27,9 +30,6 @@ namespace Math
 		Quaternion& operator+=(const Quaternion& Rhs);
 		Quaternion& operator-=(const Quaternion& Rhs);
 		Quaternion& operator*=(const Quaternion& Rhs);
-
-		float operator[](int i) const;
-		float& operator[](int i);
 
 		// Equality operator
 		bool operator==(const Quaternion& Rhs) const;

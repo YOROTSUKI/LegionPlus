@@ -4,7 +4,7 @@
 #include "Directory.h"
 #include <DDS.h>
 #include <rtech.h>
-#include < io.h>
+
 void RpakLib::ExtractTextureName(const RpakLoadAsset& asset, string& name)
 {
 	// anything above v8 definitely doesn't have a name, so no point trying
@@ -68,12 +68,7 @@ void RpakLib::BuildTextureInfo(const RpakLoadAsset& asset, ApexAsset& assetInfo)
 }
 
 void RpakLib::ExportTexture(const RpakLoadAsset& asset, const string& path, bool includeImageNames, string nameOverride, bool normalRecalculate)
-{	
-	if (_access(path, 00) == -1)
-	{
-		IO::Directory::CreateDirectory(IO::Path::Combine(path, ""));
-	}
-
+{
 	string destName = nameOverride == "" ? string::Format("0x%llx%s", asset.NameHash, (const char*)ImageExtension) : nameOverride;
 	string destPath = IO::Path::Combine(path, destName);
 
@@ -314,8 +309,7 @@ void RpakLib::ExtractTexture(const RpakLoadAsset& asset, std::unique_ptr<Assets:
 
 			if (this->LoadedFiles[asset.FileIndex].StarpakMap.ContainsKey(asset.StarpakOffset))
 			{
-				if (!txtrHdr.unkMip)
-					highestMipOffset += (this->LoadedFiles[asset.FileIndex].StarpakMap[asset.StarpakOffset] - blockSize);
+				highestMipOffset += (this->LoadedFiles[asset.FileIndex].StarpakMap[asset.StarpakOffset] - blockSize);
 			}
 			else
 			{

@@ -2,7 +2,20 @@
 #include "RpakLib.h"
 #include "Path.h"
 #include "Directory.h"
-#include <rtech.h>
+#include "rtech.h"
+
+static string GetSizeinString(uint64_t size) {
+	const uint32_t KB = 1024;
+	const uint32_t MB = 1024 * 1024;
+
+	if (size >= MB)
+		return string::Format("%.2f MB", (float)size / MB);
+
+	if (size >= KB)
+		return string::Format("%.2f KB", (float)size / KB);
+
+	return string::Format("%d B", size);
+}
 
 void RpakLib::BuildWrapInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 {
@@ -10,44 +23,45 @@ void RpakLib::BuildWrapInfo(const RpakLoadAsset& Asset, ApexAsset& Info)
 	IO::BinaryReader Reader = IO::BinaryReader(RpakStream.get(), true);
 
 	RpakStream->SetPosition(this->GetFileOffset(Asset, Asset.SubHeaderIndex, Asset.SubHeaderOffset));
-	WrapAssetHeader_v7_t Header = Reader.Read<WrapAssetHeader_v7_t>();
+	WrapHeader WrapHdr = Reader.Read<WrapHeader>();
 
 	Info.Name = string::Format("Wrap_0x%llX", Asset.NameHash);
 
-
-	if (Header.name.Index || Header.name.Offset)
+	// nam
+	if (WrapHdr.Name.Index || WrapHdr.Name.Offset)
 	{
-		Info.Name = this->ReadStringFromPointer(Asset, Header.name);
-		if (Header.nameLength)
-			Info.Name = Info.Name.Substring(0, Header.nameLength);
+		Info.Name = this->ReadStringFromPointer(Asset, WrapHdr.Name);
+		if (WrapHdr.nameLength)
+			Info.Name = Info.Name.Substring(0, WrapHdr.nameLength);
 	}
 
 	if (!ExportManager::Config.GetBool("UseFullPaths"))
 		Info.Name = IO::Path::GetFileNameWithoutExtension(Info.Name).ToLower();
 
-	bool IsCompressed = Header.flags & 1;
+	bool IsCompressed = WrapHdr.flags & 1;
 
 	Info.Type = ApexAssetType::Wrap;
 	Info.Status = ApexAssetStatus::Loaded;
-	Info.DebugInfo = string::Format("0x%02X | 0x%llX", Header.flags, Asset.NameHash);
+	Info.Info = string::Format("%s | %s", GetSizeinString(WrapHdr.dcmpSize).ToCString(), IsCompressed ? GetSizeinString(WrapHdr.cmpSize).ToCString() : "N/A");
+	Info.DebugInfo = string::Format("0x%02X | 0x%llX", WrapHdr.flags, Asset.NameHash);
 }
 
-void RpakLib::ExportWrappedFile(const RpakLoadAsset& Asset, const string& Path)
+void RpakLib::ExportWrap(const RpakLoadAsset& Asset, const string& Path)
 {
 	auto RpakStream = this->GetFileStream(Asset);
 	IO::BinaryReader Reader = IO::BinaryReader(RpakStream.get(), true);
 
 	RpakStream->SetPosition(this->GetFileOffset(Asset, Asset.SubHeaderIndex, Asset.SubHeaderOffset));
-	WrapAssetHeader_v7_t Header = Reader.Read<WrapAssetHeader_v7_t>();
+	WrapHeader WrapHdr = Reader.Read<WrapHeader>();
 
 	string name = string::Format("Wrap_0x%llX", Asset.NameHash);
 
 	// nam
-	if (Header.name.Index || Header.name.Offset)
+	if (WrapHdr.Name.Index || WrapHdr.Name.Offset)
 	{
-		name = this->ReadStringFromPointer(Asset, Header.name);
-		if (Header.nameLength)
-			name = name.Substring(0, Header.nameLength);
+		name = this->ReadStringFromPointer(Asset, WrapHdr.Name);
+		if (WrapHdr.nameLength)
+			name = name.Substring(0, WrapHdr.nameLength);
 	}
 
 	string dirpath = IO::Path::Combine(Path, IO::Path::GetDirectoryName(name));
@@ -58,13 +72,13 @@ void RpakLib::ExportWrappedFile(const RpakLoadAsset& Asset, const string& Path)
 
 	if (!Utils::ShouldWriteFile(DestinationPath))
 		return;
-
-	bool IsCompressedBigger = Header.cmpSize > Header.dcmpSize;
-	bool IsCompressed = Header.flags & 1 && !IsCompressedBigger;
-	bool ContainsNullByte = Header.flags & 3;
+	  
+	bool IsCompressedBigger = WrapHdr.cmpSize > WrapHdr.dcmpSize;
+	bool IsCompressed = WrapHdr.flags & 1 && !IsCompressedBigger;
+	bool ContainsNullByte = WrapHdr.flags & 3;
 	bool IsStreamed = Asset.OptimalStarpakOffset != -1 || Asset.StarpakOffset != -1;
 
-	uint64_t Size = Header.dcmpSize;
+	uint64_t Size = WrapHdr.dcmpSize;
 
 	if (!name.Contains("bsp"))
 		Size = ContainsNullByte ? Size : Size - 1;
@@ -75,7 +89,7 @@ void RpakLib::ExportWrappedFile(const RpakLoadAsset& Asset, const string& Path)
 
 	if (!IsStreamed)
 	{
-		RpakStream->SetPosition(this->GetFileOffset(Asset, Header.data.Index, Header.data.Offset));
+		RpakStream->SetPosition(this->GetFileOffset(Asset, WrapHdr.Data.Index, WrapHdr.Data.Offset));
 		Reader.Read(tmpBuf, 0, Size);
 		Reader.Close();
 	}
@@ -95,7 +109,7 @@ void RpakLib::ExportWrappedFile(const RpakLoadAsset& Asset, const string& Path)
 			StarpakStream = this->GetStarpakStream(Asset, false);
 		}
 
-		uint64_t OutputOffset = IsCompressedBigger ? (StreamOffset - (Header.dcmpSize - Header.cmpSize)) : StreamOffset;
+		uint64_t OutputOffset = IsCompressedBigger ? (StreamOffset - (WrapHdr.dcmpSize - WrapHdr.cmpSize)) : StreamOffset;
 
 		StarpakStream->SetPosition(OutputOffset);
 		IO::BinaryReader StarReader = IO::BinaryReader(StarpakStream.get(), true);

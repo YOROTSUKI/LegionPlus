@@ -5,7 +5,7 @@
 constexpr unsigned int LIBRARY_PACKS = 2;
 constexpr unsigned int LANGUAGE_PACKS = 11;
 constexpr unsigned int RVPK_DICT_SIZE = 20;
-constexpr unsigned int RVPK_DIR_MAGIC = 'U?4';
+constexpr unsigned int RVPK_DIR_MAGIC = 'Uª4';
 
 const std::string DIR_LIBRARY_PREFIX[LIBRARY_PACKS] = { "server", "client" };
 const std::string DIR_LOCALE_PREFIX[LANGUAGE_PACKS] = { "english", "french", "german", "italian", "japanese", "korean", "polish", "portuguese", "russian", "spanish", "tchinese" };
