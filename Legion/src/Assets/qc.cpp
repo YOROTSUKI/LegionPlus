@@ -37,12 +37,12 @@ void RpakLib::ExportQC(int assetVersion, const string& Path, const string& model
 			{
 				string baseModelName = IO::Path::GetFileNameWithoutExtension(modelPath);
 				mstudiomodelv54_t model = *reinterpret_cast<mstudiomodelv54_t*>(pBodyPart + bodyPart->modelindex + (j * sizeof(mstudiomodelv54_t)));
-				
+
 				if (!*model.name)
 					qc.Write("\tblank\n");
 				else
 					qc.WriteFmt("\tstudio \"%s_%s_%i_LOD0.smd\"\n", baseModelName.ToCString(), bodyPartName, j);
-			
+
 			}
 			qc.Write("}\n\n");
 		}
@@ -56,7 +56,7 @@ void RpakLib::ExportQC(int assetVersion, const string& Path, const string& model
 
 			if (i > 0)
 			{
-				int* pSkinNameIndex = reinterpret_cast<int*>(rmdlBuf + hdr->skinindex + (hdr->numskinfamilies * hdr->numskinref * sizeof(short)) + ((i-1) * sizeof(int)));
+				int* pSkinNameIndex = reinterpret_cast<int*>(rmdlBuf + hdr->skinindex + (hdr->numskinfamilies * hdr->numskinref * sizeof(short)) + ((i - 1) * sizeof(int)));
 				skinName = rmdlBuf + *pSkinNameIndex;
 			}
 
@@ -120,7 +120,7 @@ void RpakLib::ExportQC(int assetVersion, const string& Path, const string& model
 
 			for (int j = 0; j < hitboxSet->numhitboxes; ++j)
 			{
-				char* pHitbox = pHitboxSet + hitboxSet->hitboxindex + (j*sizeof(mstudiobboxv54_t));
+				char* pHitbox = pHitboxSet + hitboxSet->hitboxindex + (j * sizeof(mstudiobboxv54_t));
 				mstudiobboxv54_t* hitbox = reinterpret_cast<mstudiobboxv54_t*>(pHitbox);
 
 				// get bone name

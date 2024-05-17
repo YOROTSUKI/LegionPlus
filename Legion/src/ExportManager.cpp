@@ -272,7 +272,7 @@ void ExportManager::ExportMdlAssets(const std::unique_ptr<MdlLib>& MdlFS, List<s
 	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "models"));
 	IO::Directory::CreateDirectory(IO::Path::Combine(ExportDirectory, "animations"));
 
-	MdlFS->InitializeModelExporter((ModelExportFormat_t)Config.Get<System::SettingType::Integer>("ModelFormat"));fatal: unable to access
+	MdlFS->InitializeModelExporter((ModelExportFormat_t)Config.Get<System::SettingType::Integer>("ModelFormat"));
 	MdlFS->InitializeAnimExporter((AnimExportFormat_t)Config.Get<System::SettingType::Integer>("AnimFormat"));
 
 	Threading::ParallelTask([&MdlFS, &ExportAssets, &AssetIndex, &CurrentProgress, &UpdateMutex, ExportDirectory]
