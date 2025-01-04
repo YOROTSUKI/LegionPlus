@@ -326,6 +326,7 @@ enum class AssetType_t : uint32_t
 	RUI = 'iu', // ui - 0x75690000
 	Map = 'pamr', // rmap - 0x70616D72
 	Effect = 'tcfe', // efct - 0x74636665
+	wepd = '0x6e706577', // 0x6e706577
 };
 
 enum class ModelExportFormat_t
